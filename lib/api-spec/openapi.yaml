@@ -1,22 +1,30 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: CineLoop API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: films
+    description: Film/episode management
+  - name: votes
+    description: Interactive voting
+  - name: users
+    description: User profiles and XP
+  - name: characters
+    description: Character following
+  - name: feed
+    description: Personalized feed and discovery
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +32,310 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /films:
+    get:
+      operationId: getFilms
+      tags: [films]
+      summary: List all films/series
+      parameters:
+        - name: genre
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: number
+        - name: offset
+          in: query
+          schema:
+            type: number
+      responses:
+        "200":
+          description: List of films
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Film"
+    post:
+      operationId: createFilm
+      tags: [films]
+      summary: Upload a new film/series
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFilmInput"
+      responses:
+        "201":
+          description: Film created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Film"
+
+  /films/{id}:
+    get:
+      operationId: getFilm
+      tags: [films]
+      summary: Get a film by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Film details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Film"
+
+  /films/{id}/episodes:
+    get:
+      operationId: getFilmEpisodes
+      tags: [films]
+      summary: Get episodes for a film
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: List of episodes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Episode"
+
+  /episodes/{id}/like:
+    post:
+      operationId: likeEpisode
+      tags: [films]
+      summary: Like an episode
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Like recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LikeResponse"
+
+  /votes:
+    get:
+      operationId: getVotes
+      tags: [votes]
+      summary: Get all active polls
+      responses:
+        "200":
+          description: List of vote polls
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VotePoll"
+
+  /votes/{id}/cast:
+    post:
+      operationId: castVote
+      tags: [votes]
+      summary: Cast a vote on a poll
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CastVoteInput"
+      responses:
+        "200":
+          description: Vote cast, XP awarded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoteResult"
+
+  /votes/{id}/results:
+    get:
+      operationId: getVoteResults
+      tags: [votes]
+      summary: Get results for a vote poll
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Vote results with percentages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VotePoll"
+
+  /users/me:
+    get:
+      operationId: getMe
+      tags: [users]
+      summary: Get current user profile
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users/me/xp-history:
+    get:
+      operationId: getXpHistory
+      tags: [users]
+      summary: Get XP earning history
+      responses:
+        "200":
+          description: XP history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/XpEvent"
+
+  /users/me/streak:
+    get:
+      operationId: getStreak
+      tags: [users]
+      summary: Get user streak info
+      responses:
+        "200":
+          description: Streak info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StreakInfo"
+
+  /characters:
+    get:
+      operationId: getCharacters
+      tags: [characters]
+      summary: List all followable characters
+      responses:
+        "200":
+          description: Characters list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Character"
+
+  /characters/{id}/follow:
+    post:
+      operationId: followCharacter
+      tags: [characters]
+      summary: Follow or unfollow a character
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Follow status updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FollowResponse"
+
+  /feed:
+    get:
+      operationId: getFeed
+      tags: [feed]
+      summary: Get personalized cinematic feed
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: number
+        - name: offset
+          in: query
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Feed items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FeedItem"
+
+  /feed/trending:
+    get:
+      operationId: getTrending
+      tags: [feed]
+      summary: Get trending films and episodes
+      responses:
+        "200":
+          description: Trending content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrendingFeed"
+
+  /feed/stats:
+    get:
+      operationId: getFeedStats
+      tags: [feed]
+      summary: Platform stats and highlights
+      responses:
+        "200":
+          description: Platform summary stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformStats"
+
+  /leaderboard:
+    get:
+      operationId: getLeaderboard
+      tags: [users]
+      summary: Get top XP earners leaderboard
+      responses:
+        "200":
+          description: Leaderboard entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeaderboardEntry"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +346,433 @@ components:
       required:
         - status
 
+    Film:
+      type: object
+      properties:
+        id:
+          type: number
+        title:
+          type: string
+        description:
+          type: string
+        genre:
+          type: string
+        thumbnailUrl:
+          type: string
+        creatorName:
+          type: string
+        creatorAvatar:
+          type: string
+        totalEpisodes:
+          type: number
+        episodesReleased:
+          type: number
+        totalLikes:
+          type: number
+        totalVotes:
+          type: number
+        isSerialised:
+          type: boolean
+        createdAt:
+          type: string
+      required:
+        - id
+        - title
+        - description
+        - genre
+        - thumbnailUrl
+        - creatorName
+        - creatorAvatar
+        - totalEpisodes
+        - episodesReleased
+        - totalLikes
+        - totalVotes
+        - isSerialised
+        - createdAt
+
+    CreateFilmInput:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        genre:
+          type: string
+        thumbnailUrl:
+          type: string
+        isSerialised:
+          type: boolean
+      required:
+        - title
+        - description
+        - genre
+        - thumbnailUrl
+        - isSerialised
+
+    Episode:
+      type: object
+      properties:
+        id:
+          type: number
+        filmId:
+          type: number
+        episodeNumber:
+          type: number
+        title:
+          type: string
+        description:
+          type: string
+        videoUrl:
+          type: string
+        thumbnailUrl:
+          type: string
+        durationSeconds:
+          type: number
+        isLocked:
+          type: boolean
+        unlockCondition:
+          type: string
+        likes:
+          type: number
+        cliffhangerText:
+          type: string
+        hasActivePoll:
+          type: boolean
+        createdAt:
+          type: string
+      required:
+        - id
+        - filmId
+        - episodeNumber
+        - title
+        - description
+        - videoUrl
+        - thumbnailUrl
+        - durationSeconds
+        - isLocked
+        - likes
+        - hasActivePoll
+        - createdAt
+
+    LikeResponse:
+      type: object
+      properties:
+        liked:
+          type: boolean
+        totalLikes:
+          type: number
+        xpEarned:
+          type: number
+      required:
+        - liked
+        - totalLikes
+        - xpEarned
+
+    VotePoll:
+      type: object
+      properties:
+        id:
+          type: number
+        episodeId:
+          type: number
+        filmTitle:
+          type: string
+        question:
+          type: string
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/VoteOption"
+        totalVotes:
+          type: number
+        isActive:
+          type: boolean
+        endsAt:
+          type: string
+        userVoted:
+          type: boolean
+        userChoice:
+          type: number
+      required:
+        - id
+        - episodeId
+        - filmTitle
+        - question
+        - options
+        - totalVotes
+        - isActive
+        - userVoted
+
+    VoteOption:
+      type: object
+      properties:
+        id:
+          type: number
+        text:
+          type: string
+        voteCount:
+          type: number
+        percentage:
+          type: number
+      required:
+        - id
+        - text
+        - voteCount
+        - percentage
+
+    CastVoteInput:
+      type: object
+      properties:
+        optionId:
+          type: number
+      required:
+        - optionId
+
+    VoteResult:
+      type: object
+      properties:
+        poll:
+          $ref: "#/components/schemas/VotePoll"
+        xpEarned:
+          type: number
+        newTotal:
+          type: number
+      required:
+        - poll
+        - xpEarned
+        - newTotal
+
+    User:
+      type: object
+      properties:
+        id:
+          type: number
+        username:
+          type: string
+        avatarUrl:
+          type: string
+        level:
+          type: number
+        xp:
+          type: number
+        xpToNextLevel:
+          type: number
+        streakDays:
+          type: number
+        totalVotes:
+          type: number
+        totalWatched:
+          type: number
+        totalLikes:
+          type: number
+        badges:
+          type: array
+          items:
+            type: string
+        followedCharacters:
+          type: array
+          items:
+            type: number
+      required:
+        - id
+        - username
+        - avatarUrl
+        - level
+        - xp
+        - xpToNextLevel
+        - streakDays
+        - totalVotes
+        - totalWatched
+        - totalLikes
+        - badges
+        - followedCharacters
+
+    XpEvent:
+      type: object
+      properties:
+        id:
+          type: number
+        action:
+          type: string
+        xpAmount:
+          type: number
+        description:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - action
+        - xpAmount
+        - description
+        - createdAt
+
+    StreakInfo:
+      type: object
+      properties:
+        currentStreak:
+          type: number
+        longestStreak:
+          type: number
+        lastActiveDate:
+          type: string
+        streakBonusXp:
+          type: number
+        isStreakAlive:
+          type: boolean
+      required:
+        - currentStreak
+        - longestStreak
+        - lastActiveDate
+        - streakBonusXp
+        - isStreakAlive
+
+    Character:
+      type: object
+      properties:
+        id:
+          type: number
+        name:
+          type: string
+        filmTitle:
+          type: string
+        avatarUrl:
+          type: string
+        bio:
+          type: string
+        followerCount:
+          type: number
+        isFollowed:
+          type: boolean
+        latestUpdate:
+          type: string
+      required:
+        - id
+        - name
+        - filmTitle
+        - avatarUrl
+        - bio
+        - followerCount
+        - isFollowed
+        - latestUpdate
+
+    FollowResponse:
+      type: object
+      properties:
+        following:
+          type: boolean
+        followerCount:
+          type: number
+      required:
+        - following
+        - followerCount
+
+    FeedItem:
+      type: object
+      properties:
+        id:
+          type: number
+        type:
+          type: string
+        episode:
+          $ref: "#/components/schemas/Episode"
+        film:
+          $ref: "#/components/schemas/Film"
+        activePoll:
+          $ref: "#/components/schemas/VotePoll"
+      required:
+        - id
+        - type
+        - episode
+        - film
+
+    TrendingFeed:
+      type: object
+      properties:
+        topFilms:
+          type: array
+          items:
+            $ref: "#/components/schemas/Film"
+        hotPolls:
+          type: array
+          items:
+            $ref: "#/components/schemas/VotePoll"
+        risingCreators:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              avatarUrl:
+                type: string
+              followerGrowth:
+                type: number
+            required:
+              - name
+              - avatarUrl
+              - followerGrowth
+      required:
+        - topFilms
+        - hotPolls
+        - risingCreators
+
+    PlatformStats:
+      type: object
+      properties:
+        totalFilms:
+          type: number
+        totalEpisodes:
+          type: number
+        activeVotePolls:
+          type: number
+        totalVotesCast:
+          type: number
+        totalUsers:
+          type: number
+        topGenres:
+          type: array
+          items:
+            type: object
+            properties:
+              genre:
+                type: string
+              count:
+                type: number
+            required:
+              - genre
+              - count
+      required:
+        - totalFilms
+        - totalEpisodes
+        - activeVotePolls
+        - totalVotesCast
+        - totalUsers
+        - topGenres
+
+    LeaderboardEntry:
+      type: object
+      properties:
+        rank:
+          type: number
+        userId:
+          type: number
+        username:
+          type: string
+        avatarUrl:
+          type: string
+        level:
+          type: number
+        xp:
+          type: number
+        streakDays:
+          type: number
+      required:
+        - rank
+        - userId
+        - username
+        - avatarUrl
+        - level
+        - xp
+        - streakDays

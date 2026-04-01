@@ -1,178 +1,109 @@
-"use client";
-
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import FeedCard from "@/components/feed/FeedCard";
-import { fetchTrending, mapToFeedItem, getTrailer } from "@/lib/tmdb";
-
-import type { FeedItem } from "@workspace/api-client-react/src/generated/api.schemas";
+import { fetchFeed } from "@/lib/tmdb";
 
 export default function FeedPage() {
-  const [feed, setFeed] = useState<FeedItem[]>([]);
+  const [feed, setFeed] = useState<any[]>([]);
   const [page, setPage] = useState(1);
   const [category, setCategory] = useState("foryou");
   const [loading, setLoading] = useState(false);
+  const [muted, setMuted] = useState(true);
+  const loadingRef = useRef(false);
+  const pageRef = useRef(1);
 
-  /* AI learning refs */
-  const watchTime = useRef<Map<string, number>>(new Map());
-  const liked = useRef<Set<string>>(new Set());
-  const skipCount = useRef<Map<string, number>>(new Map());
-
-  const containerRef = useRef<HTMLDivElement>(null);
-  const activeIndex = useRef(0);
-
-  /* LOAD DATA */
-  const loadMore = useCallback(async () => {
-    if (loading) return;
+  const load = useCallback(async (cat: string, pg: number, reset = false) => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
     setLoading(true);
-
-    let data;
-
-    if (category === "trending" || category === "foryou") {
-      data = await fetchTrending(page);
+    try {
+      const items = await fetchFeed(cat, pg);
+      setFeed((prev) => (reset ? items : [...prev, ...items]));
+      pageRef.current = pg + 1;
+      setPage(pg + 1);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      loadingRef.current = false;
+      setLoading(false);
     }
+  }, []);
 
-    if (category === "movies") {
-      data = await fetchTrending(page);
-    }
-
-    if (category === "series") {
-      data = await fetch(
-        `/api/tmdb/trending-tv?page=${page}`
-      ).then((r) => r.json());
-    }
-
-    if (category === "anime") {
-      data = await fetch(
-        `/api/tmdb/anime?page=${page}`
-      ).then((r) => r.json());
-    }
-
-    const mapped = (
-      await Promise.all(
-        data.results.map(async (movie: any) => {
-          const trailer = await getTrailer(movie.id);
-          if (!trailer) return null;
-
-          const item = mapToFeedItem(movie);
-
-          return {
-            ...item,
-            episode: {
-              ...item.episode,
-              videoUrl: trailer,
-            },
-          };
-        })
-      )
-    ).filter(Boolean);
-
-    setFeed((p) => [...p, ...mapped]);
-    setPage((p) => p + 1);
-    setLoading(false);
-  }, [page, category, loading]);
-
-  /* INITIAL LOAD */
+  // Reset and load when category changes
   useEffect(() => {
-    loadMore();
+    setFeed([]);
+    pageRef.current = 1;
+    load(category, 1, true);
   }, [category]);
 
-  /* SCROLL TRACKING */
-  const handleScroll = () => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    const index = Math.round(el.scrollTop / window.innerHeight);
-    const prev = activeIndex.current;
-
-    if (prev !== index) {
-      const prevItem = feed[prev];
-      if (prevItem) {
-        const id = prevItem.episode.id;
-        const watched = watchTime.current.get(id) || 0;
-
-        if (watched < 10) {
-          skipCount.current.set(
-            id,
-            (skipCount.current.get(id) || 0) + 1
-          );
-        }
-      }
-    }
-
-    activeIndex.current = index;
-
-    if (index > feed.length - 3) {
-      loadMore();
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - el.clientHeight * 2;
+    if (nearBottom && !loadingRef.current) {
+      load(category, pageRef.current);
     }
   };
 
-  /* AI RANKING */
-  const rankedFeed = useMemo(() => {
-    if (category !== "foryou") return feed;
-
-    return [...feed].sort((a, b) => {
-      const aWatch = watchTime.current.get(a.episode.id) || 0;
-      const bWatch = watchTime.current.get(b.episode.id) || 0;
-
-      const aSkip = skipCount.current.get(a.episode.id) || 0;
-      const bSkip = skipCount.current.get(b.episode.id) || 0;
-
-      const aLike = liked.current.has(a.episode.id) ? 30 : 0;
-      const bLike = liked.current.has(b.episode.id) ? 30 : 0;
-
-      const aScore = aWatch + aLike - aSkip * 10;
-      const bScore = bWatch + bLike - bSkip * 10;
-
-      return bScore - aScore;
-    });
-  }, [feed, category]);
+  const CATEGORIES = [
+    { id: "foryou", label: "For You" },
+    { id: "trending", label: "Trending" },
+    { id: "movies", label: "Movies" },
+    { id: "series", label: "Series" },
+    { id: "anime", label: "Anime" },
+  ];
 
   return (
-    <div className="h-screen w-full bg-black text-white overflow-hidden">
-
-      {/* CATEGORY TABS */}
-      <div className="absolute top-0 left-0 right-0 z-20 flex gap-6 px-4 py-3 bg-black/80 backdrop-blur">
-        {["foryou", "trending", "movies", "series", "anime"].map((c) => (
-          <button
-            key={c}
-            onClick={() => {
-              setFeed([]);
-              setPage(1);
-              setCategory(c);
-            }}
-            className={`capitalize ${
-              category === c ? "text-white" : "text-white/40"
-            }`}
-          >
-            {c}
-          </button>
-        ))}
+    <div className="h-screen w-full bg-black text-white overflow-hidden relative">
+      {/* HEADER */}
+      <div className="absolute top-0 left-0 right-0 z-30 bg-gradient-to-b from-black/90 to-transparent pb-4">
+        <div className="flex items-center justify-between px-4 pt-3 pb-1">
+          <span className="text-lg font-black tracking-widest">
+            CINE<span className="text-[#DC143C]">LOOP</span>
+          </span>
+        </div>
+        <div className="flex gap-1 px-4 overflow-x-auto scrollbar-none">
+          {CATEGORIES.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => {
+                if (category !== c.id) setCategory(c.id);
+              }}
+              className={`shrink-0 px-3 py-1.5 text-sm font-semibold rounded-full transition-all ${
+                category === c.id
+                  ? "bg-[#DC143C] text-white"
+                  : "text-white/50 hover:text-white"
+              }`}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* FEED */}
       <div
-        ref={containerRef}
         onScroll={handleScroll}
         className="h-full overflow-y-scroll snap-y snap-mandatory"
+        style={{ scrollbarWidth: "none" }}
       >
-        {rankedFeed.map((item, i) => (
-          <FeedCard
-            key={item.episode.id}
-            item={item}
-            isActive={i === activeIndex.current}
-            muted={false}
-            setMuted={() => {}}
-            resume={watchTime.current.get(item.episode.id) || 0}
-            onWatch={(t) =>
-              watchTime.current.set(item.episode.id, t)
-            }
-            onLike={() => liked.current.add(item.episode.id)}
-          />
-        ))}
+        {feed.length === 0 && loading ? (
+          // Skeleton cards while first load
+          Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-screen snap-start bg-zinc-900 animate-pulse" />
+          ))
+        ) : (
+          feed.map((item) => (
+            <FeedCard
+              key={item.episode.id}
+              item={item}
+              muted={muted}
+              onMuteToggle={() => setMuted((m) => !m)}
+            />
+          ))
+        )}
 
-        {loading && (
-          <div className="text-center py-6 text-white/60">
-            Loading...
+        {feed.length > 0 && loading && (
+          <div className="h-16 flex items-center justify-center text-white/40 text-sm snap-start">
+            Loading more...
           </div>
         )}
       </div>

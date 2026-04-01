@@ -6,6 +6,9 @@ import { useEffect } from "react";
 import NotFound from "@/pages/not-found";
 import { Shell } from "@/components/layout/Shell";
 
+// Header
+import AppHeader from "@/components/layout/AppHeader";
+
 // Pages
 import FeedPage from "@/pages/FeedPage";
 import TrendingPage from "@/pages/TrendingPage";
@@ -14,6 +17,7 @@ import CharactersPage from "@/pages/CharactersPage";
 import ProfilePage from "@/pages/ProfilePage";
 import LeaderboardPage from "@/pages/LeaderboardPage";
 import UploadPage from "@/pages/UploadPage";
+import NotificationsPage from "@/pages/NotificationsPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -27,16 +31,20 @@ const queryClient = new QueryClient({
 function Router() {
   return (
     <Shell>
-      <Switch>
-        <Route path="/" component={FeedPage} />
-        <Route path="/trending" component={TrendingPage} />
-        <Route path="/discover" component={DiscoverPage} />
-        <Route path="/characters" component={CharactersPage} />
-        <Route path="/profile" component={ProfilePage} />
-        <Route path="/leaderboard" component={LeaderboardPage} />
-        <Route path="/upload" component={UploadPage} />
-        <Route component={NotFound} />
-      </Switch>
+      {/* offset for fixed header */}
+      <div className="pt-16">
+        <Switch>
+          <Route path="/" component={FeedPage} />
+          <Route path="/trending" component={TrendingPage} />
+          <Route path="/discover" component={DiscoverPage} />
+          <Route path="/characters" component={CharactersPage} />
+          <Route path="/profile" component={ProfilePage} />
+          <Route path="/leaderboard" component={LeaderboardPage} />
+          <Route path="/upload" component={UploadPage} />
+          <Route path="/notifications" component={NotificationsPage} />
+          <Route component={NotFound} />
+        </Switch>
+      </div>
     </Shell>
   );
 }
@@ -51,7 +59,13 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+
+          {/* Global Header */}
+          <AppHeader />
+
+          {/* Router */}
           <Router />
+
         </WouterRouter>
         <Toaster />
       </TooltipProvider>

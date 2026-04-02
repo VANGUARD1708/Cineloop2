@@ -70,3 +70,17 @@ export async function fetchFeed(category: string, page = 1) {
   const data = await res.json();
   return (data.results || []).map(mapToFeedItem);
 }
+
+/* SEARCH (missing export — FIX) */
+export async function searchMovies(query: string) {
+  if (!query) return [];
+
+  const res = await fetch(
+    `/api/tmdb/search?query=${encodeURIComponent(query)}`
+  );
+
+  if (!res.ok) return [];
+
+  const data = await res.json();
+  return (data.results || []).map(mapToFeedItem);
+}

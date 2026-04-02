@@ -1,7 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useCallback, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Dimensions,
   FlatList,
   Platform,
@@ -25,27 +24,20 @@ const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 export default function FeedScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+
   const [category, setCategory] = useState<Category>("foryou");
-  const [activeIndex, setActiveIndex] = useState(0);
+
+  // 🔊 global mute
+  const [muted, setMuted] = useState(true);
+  const toggleMute = () => setMuted((m) => !m);
+
   const { data, isLoading, isError, refetch } = useTmdbFeed(category);
-
-  const onViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      if (viewableItems.length > 0 && viewableItems[0].index != null) {
-        setActiveIndex(viewableItems[0].index);
-      }
-    },
-    []
-  );
-
-  const viewConfigRef = useRef({
-    itemVisiblePercentThreshold: 60,
-  });
 
   const headerHeight = 50 + (Platform.OS === "web" ? 67 : insets.top);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* HEADER */}
       <View
         style={[
           styles.header,
@@ -56,12 +48,17 @@ export default function FeedScreen() {
         ]}
       >
         <View style={styles.headerRow}>
-          <Text style={styles.logo}>CINE<Text style={[styles.logo, { color: "#DC143C" }]}>LOOP</Text></Text>
+          <Text style={styles.logo}>
+            CINE<Text style={[styles.logo, { color: "#DC143C" }]}>LOOP</Text>
+          </Text>
+
           <XPBadge xp={340} streak={12} level={7} />
+
           <Pressable style={styles.searchBtn}>
             <Feather name="search" size={22} color="#ffffff" />
           </Pressable>
         </View>
+
         <CategoryTabs active={category} onChange={setCategory} />
       </View>
 
@@ -75,6 +72,7 @@ export default function FeedScreen() {
         <View style={styles.errorContainer}>
           <Feather name="wifi-off" size={48} color="#666" />
           <Text style={styles.errorText}>Could not load feed</Text>
+
           <Pressable style={styles.retryBtn} onPress={() => refetch()}>
             <Text style={styles.retryText}>Try Again</Text>
           </Pressable>
@@ -83,15 +81,17 @@ export default function FeedScreen() {
         <FlatList
           data={data}
           keyExtractor={(item) => item.id}
-          renderItem={({ item, index }) => (
-            <FeedCard item={item} isActive={index === activeIndex} />
+          renderItem={({ item }) => (
+            <FeedCard
+              item={item}
+              muted={muted}
+              onMuteToggle={toggleMute}
+            />
           )}
           pagingEnabled
           snapToAlignment="start"
           decelerationRate="fast"
           showsVerticalScrollIndicator={false}
-          onViewableItemsChanged={onViewableItemsChanged}
-          viewabilityConfig={viewConfigRef.current}
           contentContainerStyle={{ paddingTop: headerHeight }}
           style={{ marginTop: -headerHeight }}
           scrollEnabled={!!data && data.length > 0}
@@ -111,6 +111,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+
   header: {
     position: "absolute",
     top: 0,
@@ -119,6 +120,7 @@ const styles = StyleSheet.create({
     zIndex: 100,
     paddingBottom: 4,
   },
+
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -126,6 +128,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     gap: 10,
   },
+
   logo: {
     color: "#ffffff",
     fontSize: 20,
@@ -133,12 +136,15 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     flex: 1,
   },
+
   searchBtn: {
     padding: 4,
   },
+
   feedContainer: {
     flex: 1,
   },
+
   errorContainer: {
     flex: 1,
     alignItems: "center",
@@ -146,17 +152,20 @@ const styles = StyleSheet.create({
     gap: 16,
     height: SCREEN_HEIGHT,
   },
+
   errorText: {
     color: "#666",
     fontSize: 16,
     fontFamily: "Inter_500Medium",
   },
+
   retryBtn: {
     backgroundColor: "#DC143C",
     paddingHorizontal: 24,
     paddingVertical: 10,
     borderRadius: 4,
   },
+
   retryText: {
     color: "#fff",
     fontSize: 14,

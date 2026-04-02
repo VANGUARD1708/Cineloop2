@@ -76,7 +76,7 @@ export async function searchMovies(query: string) {
   if (!query) return [];
 
   const res = await fetch(
-    `/api/tmdb/search?query=${encodeURIComponent(query)}`
+    `/api/tmdb/search?q=${encodeURIComponent(query)}`
   );
 
   if (!res.ok) return [];

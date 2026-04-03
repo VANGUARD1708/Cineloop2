@@ -27,7 +27,9 @@ export default function FeedCard({ item, muted, onMuteToggle }: Props) {
 
   const [isVisible, setIsVisible] = useState(false);
   const [playInline, setPlayInline] = useState(false);
-  const [unlocked, setUnlocked] = useState(false); // ✅ moved here
+  const [unlocked, setUnlocked] = useState(false);
+  const [paused, setPaused] = useState(false);
+
   const [trailer, setTrailer] = useState<TrailerState>({
     status: "idle",
     url: null,
@@ -36,10 +38,19 @@ export default function FeedCard({ item, muted, onMuteToggle }: Props) {
 
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(episode.likes ?? 0);
-  const [bookmarked, setBookmarked] = useState(false);
   const [showHeart, setShowHeart] = useState(false);
   const lastTap = useRef(0);
   const [iframeLoaded, setIframeLoaded] = useState(false);
+
+  const sendCommand = (func: string) => {
+    iframeRef.current?.contentWindow?.postMessage(
+      JSON.stringify({
+        event: "command",
+        func,
+      }),
+      "*"
+    );
+  };
 
   /* visibility */
   useEffect(() => {
@@ -55,18 +66,19 @@ export default function FeedCard({ item, muted, onMuteToggle }: Props) {
     return () => observer.disconnect();
   }, []);
 
-  /* auto play after unlock */
+  /* autoplay */
   useEffect(() => {
     if (unlocked && isVisible && trailer.status === "ready") {
       setPlayInline(true);
+      setPaused(false);
     }
   }, [unlocked, isVisible, trailer.status]);
 
-  /* reset */
+  /* pause when out of view */
   useEffect(() => {
     if (!isVisible) {
-      setIframeLoaded(false);
       setPlayInline(false);
+      setPaused(true);
     }
   }, [isVisible]);
 
@@ -97,8 +109,17 @@ export default function FeedCard({ item, muted, onMuteToggle }: Props) {
 
   const iframeSrc =
     isVisible && playInline && trailer.status === "ready" && trailer.url
-      ? `${trailer.url}?autoplay=1&mute=${muted ? 1 : 0}&playsinline=1&controls=0&rel=0&loop=1&playlist=${trailer.ytKey}`
+      ? `${trailer.url}?autoplay=1&mute=1&playsinline=1&controls=0&rel=0&loop=1&playlist=${trailer.ytKey}&enablejsapi=1`
       : undefined;
+
+  const handleTap = () => {
+    if (paused) {
+      sendCommand("playVideo");
+    } else {
+      sendCommand("pauseVideo");
+    }
+    setPaused(!paused);
+  };
 
   const handleDoubleTap = () => {
     const now = Date.now();
@@ -121,7 +142,10 @@ export default function FeedCard({ item, muted, onMuteToggle }: Props) {
     <div
       ref={cardRef}
       className="relative h-screen snap-start bg-black text-white overflow-hidden"
-      onClick={handleDoubleTap}
+      onClick={(e) => {
+        handleTap();
+        handleDoubleTap();
+      }}
     >
       {backgroundImage && (
         <img
@@ -137,7 +161,13 @@ export default function FeedCard({ item, muted, onMuteToggle }: Props) {
         <iframe
           ref={iframeRef}
           src={iframeSrc}
-          onLoad={() => setIframeLoaded(true)}
+          onLoad={() => {
+            setIframeLoaded(true);
+
+            setTimeout(() => {
+              if (!muted) sendCommand("unMute");
+            }, 300);
+          }}
           allow="autoplay; fullscreen"
           allowFullScreen
           className="absolute inset-0 w-full h-full border-0"
@@ -145,6 +175,15 @@ export default function FeedCard({ item, muted, onMuteToggle }: Props) {
       )}
 
       <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/60" />
+
+      {!paused && null}
+      {paused && (
+        <div className="absolute inset-0 flex items-center justify-center z-20">
+          <div className="bg-black/50 w-16 h-16 rounded-full flex items-center justify-center">
+            <Play className="w-8 h-8 text-white fill-white ml-1" />
+          </div>
+        </div>
+      )}
 
       {/* FIRST TAP UNLOCK */}
       {!unlocked && trailer.status === "ready" && (
@@ -164,8 +203,17 @@ export default function FeedCard({ item, muted, onMuteToggle }: Props) {
 
       {/* right actions */}
       <div className="absolute right-3 bottom-32 flex flex-col items-center gap-5 z-20">
-        <button onClick={(e)=>{e.stopPropagation();triggerLike();}}>
-          <Heart className={`w-7 h-7 ${liked ? "text-[#DC143C] fill-[#DC143C]" : "text-white"}`} />
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            triggerLike();
+          }}
+        >
+          <Heart
+            className={`w-7 h-7 ${
+              liked ? "text-[#DC143C] fill-[#DC143C]" : "text-white"
+            }`}
+          />
           <span className="text-xs">{likeCount}</span>
         </button>
 
@@ -177,8 +225,23 @@ export default function FeedCard({ item, muted, onMuteToggle }: Props) {
           <Share2 className="w-7 h-7 text-white" />
         </button>
 
-        <button onClick={(e)=>{e.stopPropagation();onMuteToggle();}}>
-          {muted ? <VolumeX className="w-7 h-7"/> : <Volume2 className="w-7 h-7"/>}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onMuteToggle();
+
+            if (muted) {
+              sendCommand("unMute");
+            } else {
+              sendCommand("mute");
+            }
+          }}
+        >
+          {muted ? (
+            <VolumeX className="w-7 h-7" />
+          ) : (
+            <Volume2 className="w-7 h-7" />
+          )}
         </button>
       </div>
 

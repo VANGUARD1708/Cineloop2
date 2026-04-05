@@ -1,5 +1,3 @@
-// All TMDB calls go through our server proxy — no client-side API key needed.
-
 export function getImage(path?: string, size = "w780") {
   if (!path) return "";
   return `https://image.tmdb.org/t/p/${size}${path}`;
@@ -19,8 +17,54 @@ export interface RawTmdbItem {
   media_type?: string;
 }
 
-export function mapToFeedItem(movie: RawTmdbItem) {
+async function fetchTrailer(id: number, type: string) {
+  try {
+    const res = await fetch(`/api/tmdb/videos?id=${id}&type=${type}`);
+    if (!res.ok) return null;
+
+    const data = await res.json();
+
+    const priority = [
+      "Trailer",
+      "Official Trailer",
+      "Teaser",
+      "Clip",
+      "Featurette",
+      "Opening Credits",
+      "Behind the Scenes",
+      "Bloopers",
+      "TV Spot"
+    ];
+
+    let video = data?.results?.find(
+      (v: any) =>
+        v.site === "YouTube" &&
+        priority.includes(v.type)
+    );
+
+    if (!video) {
+      video = data?.results?.find(
+        (v: any) => v.site === "YouTube"
+      );
+    }
+
+    return video?.key || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function mapToFeedItem(movie: RawTmdbItem) {
   const isTV = !movie.title || movie.media_type === "tv";
+
+  const trailerKey = await fetchTrailer(
+    movie.id,
+    isTV ? "tv" : "movie"
+  );
+
+  // skip items without video
+  if (!trailerKey) return null;
+
   return {
     film: {
       id: movie.id,
@@ -34,25 +78,13 @@ export function mapToFeedItem(movie: RawTmdbItem) {
     },
     episode: {
       id: String(movie.id),
-      trailerId: movie.id,
+      trailerId: trailerKey,
       createdAt: movie.release_date || movie.first_air_date || "2026",
       likes: Math.floor(Math.random() * 9000) + 500,
-      tags: buildTags(movie),
-      videoUrl: null as string | null,
+      tags: [],
+      videoUrl: null,
     },
   };
-}
-
-function buildTags(movie: RawTmdbItem) {
-  const tags: string[] = [];
-  if (movie.vote_average && movie.vote_average > 7.5) tags.push("Top Rated");
-  if (movie.genre_ids?.includes(28)) tags.push("Action");
-  if (movie.genre_ids?.includes(35)) tags.push("Comedy");
-  if (movie.genre_ids?.includes(27)) tags.push("Horror");
-  if (movie.genre_ids?.includes(878)) tags.push("Sci-Fi");
-  if (movie.genre_ids?.includes(16)) tags.push("Animation");
-  tags.push(movie.title ? "Movie" : "Series");
-  return tags;
 }
 
 export async function fetchFeed(category: string, page = 1) {
@@ -66,12 +98,19 @@ export async function fetchFeed(category: string, page = 1) {
 
   const url = endpoints[category] || endpoints.foryou;
   const res = await fetch(url);
+
   if (!res.ok) throw new Error("Failed to fetch feed");
+
   const data = await res.json();
-  return (data.results || []).map(mapToFeedItem);
+
+  const mapped = await Promise.all(
+    (data.results || []).slice(0, 25).map(mapToFeedItem)
+  );
+
+  // remove items without videos
+  return mapped.filter(Boolean);
 }
 
-/* SEARCH (missing export — FIX) */
 export async function searchMovies(query: string) {
   if (!query) return [];
 
@@ -82,5 +121,10 @@ export async function searchMovies(query: string) {
   if (!res.ok) return [];
 
   const data = await res.json();
-  return (data.results || []).map(mapToFeedItem);
+
+  const mapped = await Promise.all(
+    (data.results || []).map(mapToFeedItem)
+  );
+
+  return mapped.filter(Boolean);
 }

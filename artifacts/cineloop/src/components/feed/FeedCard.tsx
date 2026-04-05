@@ -4,17 +4,12 @@ import {
   Bookmark,
   Share2,
   Play,
-  Volume2
+  Volume2,
+  VolumeX
 } from "lucide-react";
 
 interface Props {
   item: any;
-}
-
-interface TrailerState {
-  status: "idle" | "loading" | "ready" | "error";
-  url: string | null;
-  ytKey: string | null;
 }
 
 export default function FeedCard({ item }: Props) {
@@ -24,15 +19,8 @@ export default function FeedCard({ item }: Props) {
 
   const [isVisible, setIsVisible] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [muted, setMuted] = useState(true);
   const [burst, setBurst] = useState(false);
-  const [soundUnlocked, setSoundUnlocked] = useState(false);
-  const [showSoundHint, setShowSoundHint] = useState(true);
-
-  const [trailer, setTrailer] = useState<TrailerState>({
-    status: "idle",
-    url: null,
-    ytKey: null,
-  });
 
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -44,6 +32,7 @@ export default function FeedCard({ item }: Props) {
       JSON.stringify({
         event: "command",
         func,
+        args: []
       }),
       "*"
     );
@@ -66,65 +55,38 @@ export default function FeedCard({ item }: Props) {
     } else {
       setPaused(false);
       sendCommand("playVideo");
-
-      if (soundUnlocked) {
-        setTimeout(() => sendCommand("unMute"), 200);
-      }
+      sendCommand("mute"); // start muted
     }
-  }, [isVisible, soundUnlocked]);
-
-  useEffect(() => {
-    if (!isVisible || trailer.status !== "idle") return;
-
-    setTrailer((t) => ({ ...t, status: "loading" }));
-
-    const mediaType = film.type === "tv" ? "tv" : "movie";
-
-    fetch(`/api/tmdb/trailer/${mediaType}/${episode.trailerId}`)
-      .then((r) => r.json())
-      .then((data) =>
-        setTrailer({
-          status: "ready",
-          url: data.url,
-          ytKey: data.key,
-        })
-      )
-      .catch(() =>
-        setTrailer({
-          status: "error",
-          url: null,
-          ytKey: null,
-        })
-      );
   }, [isVisible]);
 
-  const iframeSrc =
-    trailer.status === "ready" && trailer.url
-      ? `${trailer.url}?autoplay=1&mute=1&playsinline=1&controls=0&rel=0&modestbranding=1&loop=1&playlist=${trailer.ytKey}&enablejsapi=1&origin=${window.location.origin}`
-      : undefined;
+  const hasTrailer = !!episode.trailerId;
 
-  const unlockSound = () => {
-    if (!soundUnlocked) {
-      setSoundUnlocked(true);
-      sendCommand("unMute");
-      sendCommand("playVideo");
-
-      setTimeout(() => {
-        setShowSoundHint(false);
-      }, 400);
-    }
-  };
+  const iframeSrc = hasTrailer
+    ? `https://www.youtube.com/embed/${episode.trailerId}?autoplay=1&mute=1&playsinline=1&controls=0&disablekb=1&fs=0&iv_load_policy=3&modestbranding=1&rel=0&loop=1&playlist=${episode.trailerId}&enablejsapi=1&origin=${window.location.origin}`
+    : null;
 
   const handleTap = () => {
-    unlockSound();
+    if (!hasTrailer) return;
 
     if (paused) {
       sendCommand("playVideo");
     } else {
       sendCommand("pauseVideo");
     }
-
     setPaused(!paused);
+  };
+
+  const handleSoundToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!hasTrailer) return;
+
+    if (muted) {
+      sendCommand("unMute");
+      setMuted(false);
+    } else {
+      sendCommand("mute");
+      setMuted(true);
+    }
   };
 
   const handleDoubleTap = () => {
@@ -142,7 +104,7 @@ export default function FeedCard({ item }: Props) {
     }
   };
 
-  const handleShare = async (e:any) => {
+  const handleShare = async (e: any) => {
     e.stopPropagation();
     const url = window.location.href;
 
@@ -150,7 +112,7 @@ export default function FeedCard({ item }: Props) {
       await navigator.share({
         title: film.title,
         text: `Watch ${film.title}`,
-        url
+        url,
       });
     } else {
       navigator.clipboard.writeText(url);
@@ -166,24 +128,19 @@ export default function FeedCard({ item }: Props) {
         handleDoubleTap();
       }}
     >
-      {iframeSrc && (
+      {hasTrailer ? (
         <iframe
           ref={iframeRef}
-          src={iframeSrc}
+          src={iframeSrc!}
           allow="autoplay; encrypted-media"
           allowFullScreen
           className="absolute inset-0 w-full h-full object-cover border-0 pointer-events-none"
         />
-      )}
-
-      {/* Cinematic tap for sound */}
-      {showSoundHint && (
-        <div className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none">
-          <div className={`flex items-center gap-3 bg-black/40 backdrop-blur-md px-5 py-3 rounded-full text-white text-sm font-medium transition-all duration-500 ${soundUnlocked ? "opacity-0 scale-90" : "opacity-100 scale-100"}`}>
-            <Volume2 className="w-5 h-5" />
-            Tap for sound
-          </div>
-        </div>
+      ) : (
+        <img
+          src={film.backdrop || film.poster}
+          className="absolute inset-0 w-full h-full object-cover"
+        />
       )}
 
       <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-black/70" />
@@ -194,12 +151,25 @@ export default function FeedCard({ item }: Props) {
         </div>
       )}
 
-      {paused && (
+      {paused && hasTrailer && (
         <div className="absolute inset-0 flex items-center justify-center z-20">
           <div className="bg-black/50 w-16 h-16 rounded-full flex items-center justify-center">
             <Play className="w-8 h-8 text-white fill-white ml-1" />
           </div>
         </div>
+      )}
+
+      {hasTrailer && (
+        <button
+          onClick={handleSoundToggle}
+          className="absolute top-6 right-4 z-30 bg-black/50 p-2 rounded-full"
+        >
+          {muted ? (
+            <VolumeX className="w-5 h-5 text-white" />
+          ) : (
+            <Volume2 className="w-5 h-5 text-white" />
+          )}
+        </button>
       )}
 
       <div className="absolute right-3 bottom-32 flex flex-col items-center gap-5 z-20">
@@ -217,8 +187,17 @@ export default function FeedCard({ item }: Props) {
           <span className="text-xs">{likeCount}</span>
         </button>
 
-        <button onClick={(e)=>{e.stopPropagation(); setSaved(!saved);}}>
-          <Bookmark className={`w-7 h-7 ${saved ? "text-yellow-400 fill-yellow-400":"text-white"}`} />
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setSaved(!saved);
+          }}
+        >
+          <Bookmark
+            className={`w-7 h-7 ${
+              saved ? "text-yellow-400 fill-yellow-400" : "text-white"
+            }`}
+          />
         </button>
 
         <button onClick={handleShare}>

@@ -3,8 +3,6 @@ import {
   Heart,
   Bookmark,
   Share2,
-  Volume2,
-  VolumeX,
   Play,
 } from "lucide-react";
 
@@ -20,15 +18,20 @@ interface TrailerState {
   ytKey: string | null;
 }
 
-export default function FeedCard({ item, muted, onMuteToggle }: Props) {
+export default function FeedCard({ item }: Props) {
   const { episode, film } = item;
   const cardRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const [isVisible, setIsVisible] = useState(false);
   const [playInline, setPlayInline] = useState(false);
-  const [unlocked, setUnlocked] = useState(false);
   const [paused, setPaused] = useState(false);
+
+  const [unlocked, setUnlocked] = useState(() => {
+    return localStorage.getItem("cineloop_unlocked") === "true";
+  });
+
+  const [burst, setBurst] = useState(false);
 
   const [trailer, setTrailer] = useState<TrailerState>({
     status: "idle",
@@ -38,7 +41,6 @@ export default function FeedCard({ item, muted, onMuteToggle }: Props) {
 
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(episode.likes ?? 0);
-  const [showHeart, setShowHeart] = useState(false);
   const lastTap = useRef(0);
   const [iframeLoaded, setIframeLoaded] = useState(false);
 
@@ -52,14 +54,14 @@ export default function FeedCard({ item, muted, onMuteToggle }: Props) {
     );
   };
 
-  /* visibility */
+  /* visibility observer */
   useEffect(() => {
     const el = cardRef.current;
     if (!el) return;
 
     const observer = new IntersectionObserver(
-      ([entry]) => setIsVisible(entry.intersectionRatio >= 0.6),
-      { threshold: 0.6 }
+      ([entry]) => setIsVisible(entry.intersectionRatio >= 0.8),
+      { threshold: 0.8 }
     );
 
     observer.observe(el);
@@ -68,19 +70,33 @@ export default function FeedCard({ item, muted, onMuteToggle }: Props) {
 
   /* autoplay */
   useEffect(() => {
-    if (unlocked && isVisible && trailer.status === "ready") {
+    if (isVisible && trailer.status === "ready") {
       setPlayInline(true);
       setPaused(false);
     }
-  }, [unlocked, isVisible, trailer.status]);
+  }, [isVisible, trailer.status]);
 
-  /* pause when out of view */
+  /* pause when not visible */
   useEffect(() => {
     if (!isVisible) {
-      setPlayInline(false);
       setPaused(true);
+      setPlayInline(false);
     }
   }, [isVisible]);
+
+  /* preload */
+  useEffect(() => {
+    if (!isVisible || !trailer.url) return;
+
+    const preconnect = document.createElement("link");
+    preconnect.rel = "preconnect";
+    preconnect.href = "https://www.youtube.com";
+    document.head.appendChild(preconnect);
+
+    return () => {
+      document.head.removeChild(preconnect);
+    };
+  }, [isVisible, trailer.url]);
 
   /* fetch trailer */
   useEffect(() => {
@@ -123,7 +139,7 @@ export default function FeedCard({ item, muted, onMuteToggle }: Props) {
 
   const handleDoubleTap = () => {
     const now = Date.now();
-    if (now - lastTap.current < 350) triggerLike();
+    if (now - lastTap.current < 300) triggerLike();
     lastTap.current = now;
   };
 
@@ -131,8 +147,8 @@ export default function FeedCard({ item, muted, onMuteToggle }: Props) {
     if (!liked) {
       setLiked(true);
       setLikeCount((c: number) => c + 1);
-      setShowHeart(true);
-      setTimeout(() => setShowHeart(false), 800);
+      setBurst(true);
+      setTimeout(() => setBurst(false), 600);
     }
   };
 
@@ -151,8 +167,8 @@ export default function FeedCard({ item, muted, onMuteToggle }: Props) {
         <img
           src={backgroundImage}
           alt={film.title}
-          className={`absolute inset-0 w-full h-full object-cover ${
-            iframeLoaded ? "opacity-0" : "opacity-100"
+          className={`absolute inset-0 w-full h-full object-cover transition-all duration-[8000ms] ${
+            isVisible ? "scale-110" : "scale-100"
           }`}
         />
       )}
@@ -165,19 +181,31 @@ export default function FeedCard({ item, muted, onMuteToggle }: Props) {
             setIframeLoaded(true);
 
             setTimeout(() => {
-              if (!muted) sendCommand("unMute");
+              if (unlocked) sendCommand("unMute");
             }, 300);
           }}
           allow="autoplay; fullscreen"
           allowFullScreen
-          className="absolute inset-0 w-full h-full border-0"
+          className={`absolute inset-0 w-full h-full border-0 transition-transform duration-[7000ms] ${
+            isVisible ? "scale-105" : "scale-100"
+          }`}
         />
       )}
 
-      <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/60" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-black/70 mix-blend-multiply" />
 
-      {!paused && null}
-      {paused && (
+      {/* film grain */}
+      <div className="pointer-events-none absolute inset-0 opacity-20 mix-blend-overlay bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
+
+      {/* like burst */}
+      {burst && (
+        <div className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none">
+          <Heart className="w-24 h-24 text-[#DC143C] fill-[#DC143C] animate-ping" />
+        </div>
+      )}
+
+      {/* pause icon */}
+      {paused && unlocked && (
         <div className="absolute inset-0 flex items-center justify-center z-20">
           <div className="bg-black/50 w-16 h-16 rounded-full flex items-center justify-center">
             <Play className="w-8 h-8 text-white fill-white ml-1" />
@@ -185,13 +213,18 @@ export default function FeedCard({ item, muted, onMuteToggle }: Props) {
         </div>
       )}
 
-      {/* FIRST TAP UNLOCK */}
+      {/* first unlock */}
       {!unlocked && trailer.status === "ready" && (
         <button
           onClick={(e) => {
             e.stopPropagation();
             setUnlocked(true);
+            localStorage.setItem("cineloop_unlocked", "true");
             setPlayInline(true);
+
+            setTimeout(() => {
+              sendCommand("unMute");
+            }, 300);
           }}
           className="absolute inset-0 flex items-center justify-center z-20"
         >
@@ -224,28 +257,13 @@ export default function FeedCard({ item, muted, onMuteToggle }: Props) {
         <button>
           <Share2 className="w-7 h-7 text-white" />
         </button>
-
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onMuteToggle();
-
-            if (muted) {
-              sendCommand("unMute");
-            } else {
-              sendCommand("mute");
-            }
-          }}
-        >
-          {muted ? (
-            <VolumeX className="w-7 h-7" />
-          ) : (
-            <Volume2 className="w-7 h-7" />
-          )}
-        </button>
       </div>
 
-      <div className="absolute bottom-0 left-0 right-20 p-4 pb-6 z-20">
+      <div
+        className={`absolute bottom-0 left-0 right-20 p-4 pb-6 z-20 transition-all duration-700 ${
+          isVisible ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
+        }`}
+      >
         <h2 className="text-xl font-black">{film.title}</h2>
       </div>
     </div>

@@ -40,43 +40,32 @@ export default function FeedPage() {
       setFeed((prev) => {
         const merged = reset ? items : [...prev, ...items];
         const unique = uniqueById(merged);
+
         return reset ? shuffleArray(unique) : unique;
       });
 
       pageRef.current = page + 1;
     } catch (e) {
-      console.error(e);
+      console.error("Feed load error:", e);
     } finally {
       loadingRef.current = false;
       setLoading(false);
     }
   }, []);
 
-  /* category change */
+  /* initial load */
   useEffect(() => {
-    setFeed([]);
     pageRef.current = 1;
+    setFeed([]);
     load(category, 1, true);
 
     if (containerRef.current) {
       containerRef.current.scrollTop = 0;
     }
-
-    localStorage.removeItem("cine_last_scroll");
   }, [category]);
-
-  /* restore scroll */
-  useEffect(() => {
-    const saved = localStorage.getItem("cine_last_scroll");
-    if (saved && containerRef.current && feed.length > 0) {
-      containerRef.current.scrollTop = Number(saved);
-    }
-  }, [feed]);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
-
-    localStorage.setItem("cine_last_scroll", String(el.scrollTop));
 
     const nearBottom =
       el.scrollTop + el.clientHeight >=

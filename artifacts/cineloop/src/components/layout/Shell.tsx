@@ -24,7 +24,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </div>
           <span className="font-serif font-bold text-xl tracking-wide uppercase text-white">CineLoop</span>
         </div>
-        
+
         <nav className="flex flex-col gap-2 flex-1">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
@@ -34,8 +34,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 <div
                   className={cn(
                     "flex items-center gap-3 px-3 py-3 rounded-md transition-all cursor-pointer font-medium",
-                    isActive 
-                      ? "bg-primary text-primary-foreground shadow-[0_0_15px_rgba(220,20,60,0.3)]" 
+                    isActive
+                      ? "bg-primary text-primary-foreground shadow-[0_0_15px_rgba(220,20,60,0.3)]"
                       : "text-muted-foreground hover:text-white hover:bg-white/5"
                   )}
                 >
@@ -56,7 +56,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 relative h-[100dvh] overflow-y-auto no-scrollbar md:pb-0 pb-16">
+      <main className="flex-1 relative h-full overflow-hidden md:pb-0 pb-16">
         {children}
       </main>
 
@@ -68,12 +68,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
           return (
             <Link key={item.href} href={item.href}>
               <div className="flex flex-col items-center justify-center p-2 cursor-pointer w-14">
-                <Icon 
-                  size={24} 
+                <Icon
+                  size={24}
                   className={cn(
                     "transition-all duration-300",
-                    isActive ? "text-primary filter drop-shadow-[0_0_8px_rgba(220,20,60,0.8)]" : "text-muted-foreground"
-                  )} 
+                    isActive
+                      ? "text-primary filter drop-shadow-[0_0_8px_rgba(220,20,60,0.8)]"
+                      : "text-muted-foreground"
+                  )}
                 />
               </div>
             </Link>

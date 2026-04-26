@@ -24,29 +24,11 @@ async function fetchTrailer(id: number, type: string) {
 
     const data = await res.json();
 
-    const priority = [
-      "Trailer",
-      "Official Trailer",
-      "Teaser",
-      "Clip",
-      "Featurette",
-      "Opening Credits",
-      "Behind the Scenes",
-      "Bloopers",
-      "TV Spot"
-    ];
-
-    let video = data?.results?.find(
-      (v: any) =>
-        v.site === "YouTube" &&
-        priority.includes(v.type)
-    );
-
-    if (!video) {
-      video = data?.results?.find(
-        (v: any) => v.site === "YouTube"
-      );
-    }
+    const video =
+      data?.results?.find(
+        (v: any) => v.site === "YouTube" && v.type === "Trailer"
+      ) ||
+      data?.results?.find((v: any) => v.site === "YouTube");
 
     return video?.key || null;
   } catch {
@@ -56,19 +38,18 @@ async function fetchTrailer(id: number, type: string) {
 
 export async function mapToFeedItem(movie: RawTmdbItem) {
   const isTV = !movie.title || movie.media_type === "tv";
+  const title = movie.title || movie.name || "Untitled";
 
   const trailerKey = await fetchTrailer(
     movie.id,
     isTV ? "tv" : "movie"
   );
 
-  // skip items without video
-  if (!trailerKey) return null;
-
   return {
     film: {
       id: movie.id,
-      title: movie.title || movie.name || "Untitled",
+      tmdbId: movie.id,
+      title,
       poster: getImage(movie.poster_path, "w500"),
       backdrop: getImage(movie.backdrop_path, "w1280"),
       overview: movie.overview || "",
@@ -79,10 +60,14 @@ export async function mapToFeedItem(movie: RawTmdbItem) {
     episode: {
       id: String(movie.id),
       trailerId: trailerKey,
-      createdAt: movie.release_date || movie.first_air_date || "2026",
+      youtubeFallback: null,
+      videoUrl: null,
+      createdAt:
+        movie.release_date ||
+        movie.first_air_date ||
+        new Date().toISOString(),
       likes: Math.floor(Math.random() * 9000) + 500,
       tags: [],
-      videoUrl: null,
     },
   };
 }
@@ -104,11 +89,10 @@ export async function fetchFeed(category: string, page = 1) {
   const data = await res.json();
 
   const mapped = await Promise.all(
-    (data.results || []).slice(0, 25).map(mapToFeedItem)
+    (data.results || []).slice(0, 20).map(mapToFeedItem)
   );
 
-  // remove items without videos
-  return mapped.filter(Boolean);
+  return mapped;
 }
 
 export async function searchMovies(query: string) {
@@ -126,5 +110,5 @@ export async function searchMovies(query: string) {
     (data.results || []).map(mapToFeedItem)
   );
 
-  return mapped.filter(Boolean);
+  return mapped;
 }

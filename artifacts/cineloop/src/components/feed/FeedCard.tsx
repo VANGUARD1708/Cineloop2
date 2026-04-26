@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   Heart,
   Bookmark,
@@ -14,20 +14,38 @@ interface Props {
 
 export default function FeedCard({ item }: Props) {
   const { episode, film } = item;
-  const cardRef = useRef<HTMLDivElement>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const [isVisible, setIsVisible] = useState(false);
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(true);
   const [burst, setBurst] = useState(false);
+  const [iframeReady, setIframeReady] = useState(false);
 
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(false);
   const [likeCount, setLikeCount] = useState(episode.likes ?? 0);
+
+  const [youtubeId, setYoutubeId] = useState<string | null>(null);
+
   const lastTap = useRef(0);
 
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsVisible(entry.isIntersecting),
+      { threshold: 0.6 }
+    );
+
+    if (cardRef.current) observer.observe(cardRef.current);
+    return () => observer.disconnect();
+  }, []);
+
   const sendCommand = (func: string) => {
+    if (!iframeReady) return;
+
     iframeRef.current?.contentWindow?.postMessage(
       JSON.stringify({
         event: "command",
@@ -39,54 +57,74 @@ export default function FeedCard({ item }: Props) {
   };
 
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => setIsVisible(entry.intersectionRatio >= 0.8),
-      { threshold: 0.8 }
-    );
-
-    if (cardRef.current) observer.observe(cardRef.current);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
     if (!isVisible) {
       setPaused(true);
+      videoRef.current?.pause();
       sendCommand("pauseVideo");
     } else {
       setPaused(false);
+      videoRef.current?.play().catch(() => {});
       sendCommand("playVideo");
-      sendCommand("mute"); // start muted
+      sendCommand("mute");
     }
-  }, [isVisible]);
+  }, [isVisible, youtubeId, iframeReady]);
 
-  const hasTrailer = !!episode.trailerId;
+  useEffect(() => {
+    const loadVideo = async () => {
+      try {
+        if (!film?.id) return;
 
-  const iframeSrc = hasTrailer
-    ? `https://www.youtube.com/embed/${episode.trailerId}?autoplay=1&mute=1&playsinline=1&controls=0&disablekb=1&fs=0&iv_load_policy=3&modestbranding=1&rel=0&loop=1&playlist=${episode.trailerId}&enablejsapi=1&origin=${window.location.origin}`
-    : null;
+        const res = await fetch(
+          `/api/tmdb/videos?id=${film.id}&type=${film.type || "movie"}`
+        );
+
+        const data = await res.json();
+
+        const video =
+          data?.results?.find(
+            (v: any) => v.site === "YouTube" && v.type === "Trailer"
+          ) ||
+          data?.results?.find((v: any) => v.site === "YouTube");
+
+        if (video?.key) setYoutubeId(video.key);
+      } catch (e) {
+        console.error("video load failed", e);
+      }
+    };
+
+    loadVideo();
+  }, [film?.id]);
+
+  const iframeSrc = useMemo(() => {
+    if (!youtubeId || typeof window === "undefined") return null;
+
+    return `https://www.youtube.com/embed/${youtubeId}?autoplay=1&mute=1&playsinline=1&controls=0&disablekb=1&fs=0&iv_load_policy=3&modestbranding=1&rel=0&loop=1&playlist=${youtubeId}&enablejsapi=1&origin=${window.location.origin}`;
+  }, [youtubeId]);
 
   const handleTap = () => {
-    if (!hasTrailer) return;
-
-    if (paused) {
-      sendCommand("playVideo");
-    } else {
-      sendCommand("pauseVideo");
+    if (episode.videoUrl) {
+      paused
+        ? videoRef.current?.play().catch(() => {})
+        : videoRef.current?.pause();
+    } else if (youtubeId) {
+      paused ? sendCommand("playVideo") : sendCommand("pauseVideo");
     }
+
     setPaused(!paused);
   };
 
   const handleSoundToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!hasTrailer) return;
 
-    if (muted) {
-      sendCommand("unMute");
-      setMuted(false);
-    } else {
-      sendCommand("mute");
-      setMuted(true);
+    if (episode.videoUrl) {
+      const newMuted = !muted;
+      if (videoRef.current) videoRef.current.muted = newMuted;
+      setMuted(newMuted);
+      return;
     }
+
+    muted ? sendCommand("unMute") : sendCommand("mute");
+    setMuted(!muted);
   };
 
   const handleDoubleTap = () => {
@@ -128,10 +166,22 @@ export default function FeedCard({ item }: Props) {
         handleDoubleTap();
       }}
     >
-      {hasTrailer ? (
+      {episode.videoUrl ? (
+        <video
+          ref={videoRef}
+          src={episode.videoUrl}
+          muted
+          loop
+          playsInline
+          autoPlay
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+      ) : iframeSrc ? (
         <iframe
           ref={iframeRef}
-          src={iframeSrc!}
+          src={iframeSrc}
+          loading="lazy"
+          onLoad={() => setIframeReady(true)}
           allow="autoplay; encrypted-media"
           allowFullScreen
           className="absolute inset-0 w-full h-full object-cover border-0 pointer-events-none"
@@ -143,7 +193,7 @@ export default function FeedCard({ item }: Props) {
         />
       )}
 
-      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-black/70" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-black/70 z-10" />
 
       {burst && (
         <div className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none">
@@ -151,7 +201,7 @@ export default function FeedCard({ item }: Props) {
         </div>
       )}
 
-      {paused && hasTrailer && (
+      {paused && (
         <div className="absolute inset-0 flex items-center justify-center z-20">
           <div className="bg-black/50 w-16 h-16 rounded-full flex items-center justify-center">
             <Play className="w-8 h-8 text-white fill-white ml-1" />
@@ -159,18 +209,16 @@ export default function FeedCard({ item }: Props) {
         </div>
       )}
 
-      {hasTrailer && (
-        <button
-          onClick={handleSoundToggle}
-          className="absolute top-6 right-4 z-30 bg-black/50 p-2 rounded-full"
-        >
-          {muted ? (
-            <VolumeX className="w-5 h-5 text-white" />
-          ) : (
-            <Volume2 className="w-5 h-5 text-white" />
-          )}
-        </button>
-      )}
+      <button
+        onClick={handleSoundToggle}
+        className="absolute top-6 right-4 z-50 bg-black/50 p-2 rounded-full"
+      >
+        {muted ? (
+          <VolumeX className="w-5 h-5 text-white" />
+        ) : (
+          <Volume2 className="w-5 h-5 text-white" />
+        )}
+      </button>
 
       <div className="absolute right-3 bottom-32 flex flex-col items-center gap-5 z-20">
         <button

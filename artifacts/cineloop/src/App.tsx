@@ -31,26 +31,22 @@ const queryClient = new QueryClient({
 function Router() {
   return (
     <Shell>
-      {/* offset for fixed header */}
-      <div className="pt-16">
-        <Switch>
-          <Route path="/" component={FeedPage} />
-          <Route path="/trending" component={TrendingPage} />
-          <Route path="/discover" component={DiscoverPage} />
-          <Route path="/characters" component={CharactersPage} />
-          <Route path="/profile" component={ProfilePage} />
-          <Route path="/leaderboard" component={LeaderboardPage} />
-          <Route path="/upload" component={UploadPage} />
-          <Route path="/notifications" component={NotificationsPage} />
-          <Route component={NotFound} />
-        </Switch>
-      </div>
+      <Switch>
+        <Route path="/" component={FeedPage} />
+        <Route path="/trending" component={TrendingPage} />
+        <Route path="/discover" component={DiscoverPage} />
+        <Route path="/characters" component={CharactersPage} />
+        <Route path="/profile" component={ProfilePage} />
+        <Route path="/leaderboard" component={LeaderboardPage} />
+        <Route path="/upload" component={UploadPage} />
+        <Route path="/notifications" component={NotificationsPage} />
+        <Route component={NotFound} />
+      </Switch>
     </Shell>
   );
 }
 
 function App() {
-  // Force dark mode
   useEffect(() => {
     document.documentElement.classList.add("dark");
   }, []);
@@ -59,13 +55,8 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-
-          {/* Global Header */}
           <AppHeader />
-
-          {/* Router */}
           <Router />
-
         </WouterRouter>
         <Toaster />
       </TooltipProvider>

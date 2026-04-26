@@ -4,6 +4,10 @@ import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
+/* important for Node fetch support */
+import fetch from "node-fetch";
+(global as any).fetch = fetch;
+
 const app: Express = express();
 
 app.use(
@@ -25,9 +29,15 @@ app.use(
     },
   }),
 );
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+/* health check */
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok" });
+});
 
 app.use("/api", router);
 

@@ -5,8 +5,10 @@ import {
   Share2,
   Play,
   Volume2,
-  VolumeX
+  VolumeX,
+  Sparkles,
 } from "lucide-react";
+import WatchNowButton from "./WatchNowButton";
 
 interface Props {
   item: any;
@@ -253,8 +255,22 @@ export default function FeedCard({ item }: Props) {
         </button>
       </div>
 
+      {item.sponsored && (
+        <div className="absolute top-6 left-4 z-30 flex items-center gap-1.5 px-2.5 py-1 bg-accent/90 backdrop-blur-sm rounded-full">
+          <Sparkles size={12} className="text-black" />
+          <span className="text-[10px] font-bold uppercase tracking-wider text-black">
+            Sponsored
+          </span>
+        </div>
+      )}
+
       <div className="absolute bottom-0 left-0 right-20 p-4 pb-6 z-20">
-        <h2 className="text-xl font-black">{film.title}</h2>
+        <h2 className="text-xl font-black mb-2">{film.title}</h2>
+        <WatchNowButton
+          filmId={film.id}
+          type={film.type}
+          title={film.title}
+        />
       </div>
     </div>
   );

@@ -2,6 +2,9 @@ import { useGetMe, useGetXpHistory, useGetStreak, getGetMeQueryKey, getGetXpHist
 import { Flame, Trophy, Award, Clock, Activity, Users } from "lucide-react";
 import { format } from "date-fns";
 import FollowButton from "@/components/social/FollowButton";
+import TipJarButton from "@/components/profile/TipJarButton";
+import { Link } from "wouter";
+import { Crown } from "lucide-react";
 
 export default function ProfilePage() {
   const { data: user, isLoading: userLoading } = useGetMe({ query: { queryKey: getGetMeQueryKey() } });
@@ -60,9 +63,16 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* Follow Button */}
-          <div className="relative z-10">
+          {/* Follow / Tip / Upgrade */}
+          <div className="relative z-10 flex flex-wrap gap-2 justify-center md:justify-start">
             <FollowButton userId={user.id} />
+            <TipJarButton username={user.username} />
+            <Link href="/pricing">
+              <button className="inline-flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-primary to-accent rounded-md text-white font-bold text-sm shadow-[0_0_15px_rgba(220,20,60,0.4)] hover:opacity-90 transition-all">
+                <Crown size={14} />
+                Go Pro
+              </button>
+            </Link>
           </div>
 
           <div className="flex items-center gap-4 relative z-10">

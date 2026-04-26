@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, Flame, Compass, Users, User, Trophy, PlusSquare } from "lucide-react";
+import { Home, Flame, Compass, Users, User, Trophy, PlusSquare, Crown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -47,8 +47,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <Link href="/upload" className="w-full mt-auto">
-          <div className="flex items-center gap-3 px-3 py-3 rounded-md transition-all cursor-pointer font-medium text-muted-foreground hover:text-white hover:bg-white/5 border border-white/10 mt-4">
+        <Link href="/pricing" className="w-full mt-auto">
+          <div className="flex items-center gap-3 px-3 py-3 rounded-md transition-all cursor-pointer font-bold bg-gradient-to-r from-primary/20 to-accent/20 border border-primary/40 text-white hover:from-primary/30 hover:to-accent/30 mt-4 shadow-[0_0_15px_rgba(220,20,60,0.2)]">
+            <Crown size={20} className="text-primary" />
+            Upgrade to Pro
+          </div>
+        </Link>
+
+        <Link href="/upload" className="w-full">
+          <div className="flex items-center gap-3 px-3 py-3 rounded-md transition-all cursor-pointer font-medium text-muted-foreground hover:text-white hover:bg-white/5 border border-white/10 mt-2">
             <PlusSquare size={20} />
             Upload
           </div>

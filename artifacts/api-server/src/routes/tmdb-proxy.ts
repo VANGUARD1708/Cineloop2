@@ -114,6 +114,27 @@ router.get("/trailer/:mediaType/:id", async (req, res) => {
   }
 });
 
+/* watch providers — for "Watch Now" deep links */
+router.get("/watch/:mediaType/:id", async (req, res) => {
+  try {
+    const { mediaType, id } = req.params;
+    const type = mediaType === "tv" ? "tv" : "movie";
+    const data: any = await tmdbFetch(`/${type}/${id}/watch/providers`);
+
+    const region = (req.query.region as string) || "US";
+    const regionData = data?.results?.[region] || data?.results?.GB || null;
+
+    res.json({
+      link: regionData?.link || null,
+      flatrate: regionData?.flatrate || [],
+      rent: regionData?.rent || [],
+      buy: regionData?.buy || [],
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message, link: null });
+  }
+});
+
 /* legacy /videos endpoint kept for backward compat */
 router.get("/videos", async (req, res) => {
   try {

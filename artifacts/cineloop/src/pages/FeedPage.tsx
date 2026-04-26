@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import FeedCard from "@/components/feed/FeedCard";
+import AdCard from "@/components/feed/AdCard";
 import { fetchFeed } from "@/lib/tmdb";
+
+const AD_INTERVAL = 5;
 
 /* shuffle helper */
 function shuffleArray<T>(array: T[]): T[] {
@@ -118,9 +121,34 @@ export default function FeedPage() {
         className="h-full overflow-y-scroll snap-y snap-mandatory"
         style={{ scrollbarWidth: "none" }}
       >
-        {feed.map((item) => (
-          <FeedCard key={item.episode.id} item={item} />
-        ))}
+        {feed.map((item, idx) => {
+          const cards = [
+            <FeedCard key={item.episode.id} item={item} />,
+          ];
+          /* interleave an ad slot every N items */
+          if ((idx + 1) % AD_INTERVAL === 0) {
+            cards.push(
+              <AdCard
+                key={`ad-${idx}`}
+                variant={(idx / AD_INTERVAL) % 2 === 0 ? "house" : "sponsored"}
+                sponsor={
+                  (idx / AD_INTERVAL) % 2 === 0
+                    ? undefined
+                    : {
+                        title: "Now streaming: Apex on TMDB partners",
+                        tagline:
+                          "A grieving woman pushes her limits in a solo adventure.",
+                        cta: "Watch the trailer",
+                        href: "https://www.themoviedb.org/movie/1318447",
+                        image:
+                          "https://image.tmdb.org/t/p/w1280/9nzfyiYbmTUXWC4B2kwjl4NAlqO.jpg",
+                      }
+                }
+              />,
+            );
+          }
+          return cards;
+        })}
 
         {loading && (
           <div className="h-16 flex items-center justify-center text-white/40 text-sm">

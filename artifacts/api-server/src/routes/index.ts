@@ -25,6 +25,6 @@ router.use(usersRouter);
 router.use(notificationsRouter);
 
 /* external video source */
-router.use(tmdbProxyRouter);
+router.use("/tmdb", tmdbProxyRouter);
 
 export default router;

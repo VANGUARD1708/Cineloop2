@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --config vite.config.ts --host 0.0.0.0",
+    "dev": "concurrently -k -n vite,api -c blue,magenta \"vite --config vite.config.ts --host 0.0.0.0\" \"PORT=8080 NODE_ENV=development node --enable-source-maps ../api-server/dist/index.mjs\"",
     "build": "vite build --config vite.config.ts",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit"
@@ -52,6 +52,7 @@
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
     "cmdk": "^1.1.1",
+    "concurrently": "^9.2.1",
     "date-fns": "^3.6.0",
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "catalog:",

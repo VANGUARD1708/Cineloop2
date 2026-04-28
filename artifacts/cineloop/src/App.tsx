@@ -19,6 +19,7 @@ import LeaderboardPage from "@/pages/LeaderboardPage";
 import UploadPage from "@/pages/UploadPage";
 import NotificationsPage from "@/pages/NotificationsPage";
 import PricingPage from "@/pages/PricingPage";
+import PayReturnPage from "@/pages/PayReturnPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,6 +43,7 @@ function Router() {
         <Route path="/upload" component={UploadPage} />
         <Route path="/notifications" component={NotificationsPage} />
         <Route path="/pricing" component={PricingPage} />
+        <Route path="/pay/return" component={PayReturnPage} />
         <Route component={NotFound} />
       </Switch>
     </Shell>

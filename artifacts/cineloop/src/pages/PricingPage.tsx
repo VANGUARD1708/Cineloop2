@@ -1,6 +1,10 @@
 import { useState } from "react";
-import { Check, Crown, Zap, Sparkles, Film } from "lucide-react";
+import { Check, Crown, Zap, Sparkles, Film, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import PaymentProviderSelect, {
+  usePaymentProviders,
+  type Provider,
+} from "@/components/payments/PaymentProviderSelect";
 
 type Cycle = "monthly" | "annual";
 
@@ -25,18 +29,63 @@ const FEATURES_PRO = [
 
 export default function PricingPage() {
   const [cycle, setCycle] = useState<Cycle>("monthly");
+  const [email, setEmail] = useState("");
+  const { enabled, loading: providersLoading } = usePaymentProviders();
+  const firstEnabled = (Object.entries(enabled).find(([, v]) => v)?.[0] ||
+    null) as Provider | null;
+  const [provider, setProvider] = useState<Provider | null>(firstEnabled);
+  const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
 
+  const effectiveProvider = provider || firstEnabled;
   const proPrice = cycle === "monthly" ? 4.99 : 49.99;
   const proSub = cycle === "monthly" ? "/month" : "/year";
   const savings = cycle === "annual" ? "Save 17%" : null;
 
-  const handleUpgrade = () => {
-    toast({
-      title: "Stripe checkout coming soon",
-      description:
-        "Connect a Stripe account to enable real subscription payments.",
-    });
+  const handleUpgrade = async () => {
+    if (!effectiveProvider) {
+      toast({
+        title: "No payment processor configured",
+        description: "Set up Stripe, Paystack, or Flutterwave to enable checkout.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      toast({
+        title: "Email required",
+        description: "We need an email to send your receipt.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const base = import.meta.env.BASE_URL;
+      const res = await fetch(`${base}api/payments/checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: effectiveProvider,
+          type: "subscription",
+          plan: cycle,
+          email,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.checkoutUrl) {
+        throw new Error(data.error || "Could not start checkout");
+      }
+      window.location.href = data.checkoutUrl;
+    } catch (err) {
+      toast({
+        title: "Checkout error",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -143,18 +192,59 @@ export default function PricingPage() {
               ))}
             </ul>
 
-            <button
-              onClick={handleUpgrade}
-              className="mt-8 w-full py-3 rounded-md font-bold text-sm bg-primary text-white hover:bg-primary/90 transition-all shadow-[0_0_20px_rgba(220,20,60,0.4)] relative z-10"
-            >
-              <Zap size={14} className="inline mr-1 -mt-0.5" />
-              Upgrade to Pro
-            </button>
+            <div className="mt-6 space-y-3 relative z-10">
+              <input
+                type="email"
+                placeholder="your@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-3 py-2.5 bg-black/40 border border-border rounded-md text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+              />
+
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5 font-bold">
+                  Payment method
+                </p>
+                {providersLoading ? (
+                  <div className="text-xs text-muted-foreground py-3 text-center">
+                    Loading…
+                  </div>
+                ) : !firstEnabled ? (
+                  <div className="text-xs text-amber-400/80 py-3 text-center bg-amber-500/5 border border-amber-500/20 rounded-md">
+                    No payment processor configured yet
+                  </div>
+                ) : (
+                  <PaymentProviderSelect
+                    selected={effectiveProvider}
+                    onChange={setProvider}
+                    enabled={enabled}
+                  />
+                )}
+              </div>
+
+              <button
+                onClick={handleUpgrade}
+                disabled={submitting || !firstEnabled}
+                className="w-full py-3 rounded-md font-bold text-sm bg-primary text-white hover:bg-primary/90 transition-all shadow-[0_0_20px_rgba(220,20,60,0.4)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    Redirecting…
+                  </>
+                ) : (
+                  <>
+                    <Zap size={14} />
+                    Upgrade to Pro · ${proPrice}
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
 
         <div className="text-center mt-10 text-xs text-muted-foreground">
-          Secure checkout via Stripe · Cancel anytime · Renews automatically
+          Secure checkout via Stripe, Paystack, or Flutterwave · Cancel anytime
         </div>
       </div>
     </div>

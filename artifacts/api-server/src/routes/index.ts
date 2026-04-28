@@ -8,6 +8,7 @@ import charactersRouter from "./characters";
 import feedRouter from "./feed";
 import notificationsRouter from "./notifications";
 import tmdbProxyRouter from "./tmdb-proxy";
+import paymentsRouter from "./payments";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,8 @@ router.use(notificationsRouter);
 
 /* external video source */
 router.use("/tmdb", tmdbProxyRouter);
+
+/* monetization */
+router.use("/payments", paymentsRouter);
 
 export default router;

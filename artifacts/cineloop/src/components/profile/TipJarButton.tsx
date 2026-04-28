@@ -1,5 +1,10 @@
 import { useState } from "react";
-import { Heart, Coffee, Gift, X } from "lucide-react";
+import { Heart, Coffee, Gift, X, Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import PaymentProviderSelect, {
+  usePaymentProviders,
+  type Provider,
+} from "@/components/payments/PaymentProviderSelect";
 
 interface Props {
   username?: string;
@@ -14,20 +19,60 @@ const TIP_AMOUNTS = [
 export default function TipJarButton({ username }: Props) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(10);
+  const [email, setEmail] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const { enabled, loading: providersLoading } = usePaymentProviders();
+  const firstEnabled = (Object.entries(enabled).find(([, v]) => v)?.[0] ||
+    null) as Provider | null;
+  const [provider, setProvider] = useState<Provider | null>(null);
+  const effectiveProvider = provider || firstEnabled;
+  const { toast } = useToast();
 
-  const handleTip = () => {
-    /*
-      Stripe / Buy Me a Coffee integration:
-      Replace this with a real Stripe Checkout session create call,
-      or deep-link to your Buy Me a Coffee profile.
-        e.g. window.open(`https://buymeacoffee.com/${username}`)
-    */
-    window.open(
-      `https://www.buymeacoffee.com/${username || "cineloop"}`,
-      "_blank",
-      "noopener,noreferrer",
-    );
-    setOpen(false);
+  const handleTip = async () => {
+    if (!effectiveProvider) {
+      toast({
+        title: "No payment processor configured",
+        description: "Set up Stripe, Paystack, or Flutterwave to send tips.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      toast({
+        title: "Email required",
+        description: "We need an email to send your receipt.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const base = import.meta.env.BASE_URL;
+      const res = await fetch(`${base}api/payments/checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: effectiveProvider,
+          type: "tip",
+          amountCents: selected * 100,
+          email,
+          username,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.checkoutUrl) {
+        throw new Error(data.error || "Could not start checkout");
+      }
+      window.location.href = data.checkoutUrl;
+    } catch (err) {
+      toast({
+        title: "Checkout error",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -46,7 +91,7 @@ export default function TipJarButton({ username }: Props) {
           onClick={() => setOpen(false)}
         >
           <div
-            className="bg-card border border-border rounded-xl p-6 w-full max-w-sm relative"
+            className="bg-card border border-border rounded-xl p-6 w-full max-w-sm relative max-h-[90vh] overflow-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -63,7 +108,7 @@ export default function TipJarButton({ username }: Props) {
               Show appreciation. 100% goes to the creator.
             </p>
 
-            <div className="grid grid-cols-3 gap-2 mb-5">
+            <div className="grid grid-cols-3 gap-2 mb-4">
               {TIP_AMOUNTS.map((t) => {
                 const Icon = t.icon;
                 const active = selected === t.amount;
@@ -92,15 +137,52 @@ export default function TipJarButton({ username }: Props) {
               })}
             </div>
 
+            <input
+              type="email"
+              placeholder="your@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full mb-3 px-3 py-2.5 bg-black/40 border border-border rounded-md text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+            />
+
+            <div className="mb-4">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5 font-bold">
+                Payment method
+              </p>
+              {providersLoading ? (
+                <div className="text-xs text-muted-foreground py-3 text-center">
+                  Loading…
+                </div>
+              ) : !firstEnabled ? (
+                <div className="text-xs text-amber-400/80 py-3 text-center bg-amber-500/5 border border-amber-500/20 rounded-md">
+                  No payment processor configured
+                </div>
+              ) : (
+                <PaymentProviderSelect
+                  selected={effectiveProvider}
+                  onChange={setProvider}
+                  enabled={enabled}
+                />
+              )}
+            </div>
+
             <button
               onClick={handleTip}
-              className="w-full py-3 rounded-md font-bold text-sm bg-primary hover:bg-primary/90 text-white transition-all shadow-[0_0_15px_rgba(220,20,60,0.4)]"
+              disabled={submitting || !firstEnabled}
+              className="w-full py-3 rounded-md font-bold text-sm bg-primary hover:bg-primary/90 text-white transition-all shadow-[0_0_15px_rgba(220,20,60,0.4)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              Send ${selected}
+              {submitting ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  Redirecting…
+                </>
+              ) : (
+                <>Send ${selected}</>
+              )}
             </button>
 
             <p className="text-[10px] text-center text-muted-foreground mt-3">
-              Powered by Buy Me a Coffee · Stripe checkout coming soon
+              Secure checkout via Stripe, Paystack, or Flutterwave
             </p>
           </div>
         </div>

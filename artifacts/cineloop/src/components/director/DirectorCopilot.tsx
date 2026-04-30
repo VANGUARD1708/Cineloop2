@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, X, Send, Mic, MicOff, Loader2, Film } from "lucide-react";
+import { Link } from "wouter";
+import { Sparkles, X, Send, Mic, MicOff, Loader2, Film, Crown } from "lucide-react";
 import useDirectorChat, { type ChatPick } from "@/hooks/useDirectorChat";
 import useVoiceInput from "@/hooks/useVoiceInput";
+import { useIdentity } from "@/hooks/useIdentity";
 
 const SUGGESTIONS = [
   "Surprise me with a 90s sci-fi",
@@ -13,7 +15,15 @@ const SUGGESTIONS = [
 export default function DirectorCopilot() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
-  const { turns, send, pending, reset } = useDirectorChat();
+  const { turns, send, pending, reset, quota } = useDirectorChat();
+  const { user } = useIdentity();
+  const isPro = !!user?.isPro;
+  // Quota from chat call wins (most live); falls back to identity snapshot.
+  const liveQuota = quota
+    ? { used: quota.used, limit: quota.limit }
+    : user?.chatQuota
+    ? { used: user.chatQuota.used, limit: user.chatQuota.limit }
+    : null;
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -99,17 +109,42 @@ export default function DirectorCopilot() {
               </div>
               <div>
                 <p className="text-sm font-semibold text-white">AI Director</p>
-                <p className="text-[11px] text-white/50">Curated by your taste</p>
+                <p className="text-[11px] text-white/50">
+                  {isPro ? "Unlimited · curated by your taste" : "Curated by your taste"}
+                </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={reset}
-              className="text-[11px] text-white/50 hover:text-white/90"
-              data-testid="button-copilot-reset"
-            >
-              New chat
-            </button>
+            <div className="flex items-center gap-2">
+              {isPro ? (
+                <span
+                  className="flex items-center gap-1 rounded-full border border-amber-500/40 bg-gradient-to-r from-amber-500/15 to-rose-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-300"
+                  data-testid="badge-copilot-pro"
+                >
+                  <Crown className="h-3 w-3" />
+                  Pro
+                </span>
+              ) : liveQuota ? (
+                <span
+                  className={`rounded-full border px-2 py-0.5 text-[10px] font-medium tabular-nums ${
+                    liveQuota.used >= liveQuota.limit
+                      ? "border-rose-500/50 bg-rose-500/15 text-rose-200"
+                      : "border-white/10 bg-white/5 text-white/60"
+                  }`}
+                  data-testid="badge-copilot-quota"
+                  title={`${liveQuota.limit - liveQuota.used} chat${liveQuota.limit - liveQuota.used === 1 ? "" : "s"} left today`}
+                >
+                  {liveQuota.used}/{liveQuota.limit}
+                </span>
+              ) : null}
+              <button
+                type="button"
+                onClick={reset}
+                className="text-[11px] text-white/50 hover:text-white/90"
+                data-testid="button-copilot-reset"
+              >
+                New chat
+              </button>
+            </div>
           </div>
 
           {/* Messages */}
@@ -118,27 +153,53 @@ export default function DirectorCopilot() {
             className="max-h-[55vh] overflow-y-auto px-4 py-3"
             data-testid="copilot-messages"
           >
-            {turns.map((t) => (
-              <div key={t.id} className={`mb-3 ${t.role === "user" ? "text-right" : "text-left"}`}>
-                <div
-                  className={`inline-block max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
-                    t.role === "user"
-                      ? "bg-rose-600/90 text-white"
-                      : "bg-white/5 text-white/90"
-                  }`}
-                  data-testid={`turn-${t.role}`}
-                >
-                  {t.text}
-                </div>
-                {t.role === "assistant" && t.picks && t.picks.length > 0 && (
-                  <div className="mt-2 grid grid-cols-1 gap-2">
-                    {t.picks.map((p, i) => (
-                      <PickCard key={`${t.id}-${i}`} pick={p} />
-                    ))}
+            {turns.map((t) => {
+              if (t.role === "system") {
+                return (
+                  <div key={t.id} className="mb-3" data-testid="turn-system">
+                    <div className="rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-rose-500/10 px-3 py-2.5 text-sm text-amber-100">
+                      <div className="flex items-start gap-2">
+                        <Crown className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-300" />
+                        <div className="flex-1">
+                          <p className="leading-relaxed">{t.text}</p>
+                          {t.upgradeCta && (
+                            <Link
+                              href="/pricing"
+                              onClick={() => setOpen(false)}
+                              className="mt-1.5 inline-flex items-center gap-1 rounded-md bg-amber-500/20 px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-amber-200 hover:bg-amber-500/30"
+                              data-testid="button-copilot-upgrade"
+                            >
+                              <Crown className="h-3 w-3" /> Upgrade to Pro
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
+                );
+              }
+              return (
+                <div key={t.id} className={`mb-3 ${t.role === "user" ? "text-right" : "text-left"}`}>
+                  <div
+                    className={`inline-block max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
+                      t.role === "user"
+                        ? "bg-rose-600/90 text-white"
+                        : "bg-white/5 text-white/90"
+                    }`}
+                    data-testid={`turn-${t.role}`}
+                  >
+                    {t.text}
+                  </div>
+                  {t.role === "assistant" && t.picks && t.picks.length > 0 && (
+                    <div className="mt-2 grid grid-cols-1 gap-2">
+                      {t.picks.map((p, i) => (
+                        <PickCard key={`${t.id}-${i}`} pick={p} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
             {pending && (
               <div className="mb-3 text-left">
                 <div className="inline-flex items-center gap-2 rounded-2xl bg-white/5 px-3 py-2 text-sm text-white/70">

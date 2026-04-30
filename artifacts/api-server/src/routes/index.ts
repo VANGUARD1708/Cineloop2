@@ -16,6 +16,7 @@ import subscriptionRouter from "./subscription";
 import recommendationsRouter from "./recommendations";
 import { mediaRouter } from "./media";
 import { directorRouter } from "./director";
+import adminRouter from "./admin";
 
 const router: IRouter = Router();
 
@@ -56,5 +57,8 @@ router.use(mediaRouter);
 
 /* AI Director Co-pilot — chat, best-clip selection, presence */
 router.use(directorRouter);
+
+/* Admin — revenue, users, abuse moderation (gated by requireAdmin) */
+router.use(adminRouter);
 
 export default router;

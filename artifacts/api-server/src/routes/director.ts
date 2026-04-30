@@ -4,6 +4,8 @@ import fetch from "node-fetch";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { db, watchHistoryTable, tasteProfilesTable } from "@workspace/db";
 import { desc, eq } from "drizzle-orm";
+import { chatRateLimit } from "../lib/rate-limit";
+import { loadUserIfPresent } from "../lib/auth-guards";
 
 const router: IRouter = Router();
 
@@ -87,14 +89,39 @@ async function tmdbSearchMinimal(title: string, year: number | null, mediaType: 
   }
 }
 
-router.post("/director/chat", async (req, res) => {
+router.post("/director/chat", loadUserIfPresent, async (req, res) => {
   const body = chatBodySchema.safeParse(req.body);
   if (!body.success) {
     res.status(400).json({ error: "invalid_body" });
     return;
   }
 
+  // Banned users can't chat at all.
+  if (req.authUser?.isBanned) {
+    res.status(403).json({ error: "account_banned" });
+    return;
+  }
+
   const uid = req.userId ?? null;
+  const isPro = req.authUser?.isPro ?? false;
+  const quota = await chatRateLimit(req, { userId: uid, ip: req.ip, isPro });
+  res.setHeader("x-ratelimit-limit", String(quota.limit));
+  res.setHeader("x-ratelimit-remaining", String(quota.remaining));
+  res.setHeader("x-ratelimit-reset", String(Math.floor(quota.resetAt / 1000)));
+  if (!quota.allowed) {
+    res.status(429).json({
+      error: "rate_limited",
+      message: isPro
+        ? "Daily chat limit reached. Resets at midnight UTC."
+        : uid
+        ? `Free plan: ${quota.limit} chats / day. Upgrade to Pro for unlimited.`
+        : `Anonymous limit: ${quota.limit} chats / day. Sign in or upgrade to Pro for more.`,
+      quota: { used: quota.used, limit: quota.limit, resetAt: quota.resetAt },
+      upgrade: !isPro,
+    });
+    return;
+  }
+
   let historyHints: string[] = [];
   let vibeHint: string | null = null;
 
@@ -225,7 +252,7 @@ function bestClipCacheSet(key: string, value: BestClipResult): void {
   bestClipCache.set(key, { value, expiresAt: Date.now() + BEST_CLIP_TTL_MS });
 }
 
-router.get("/director/best-clip/:type/:id", async (req, res) => {
+router.get("/director/best-clip/:type/:id", loadUserIfPresent, async (req, res) => {
   const p = parseParams(req, res);
   if (!p) return;
   if (!TMDB_KEY) {
@@ -233,10 +260,14 @@ router.get("/director/best-clip/:type/:id", async (req, res) => {
     return;
   }
 
-  const cacheKey = `${p.type}:${p.id}`;
+  const isPro = req.authUser?.isPro ?? false;
+  // Pro users get AI-curated picks; free users get the deterministic heuristic.
+  // Cache them under separate keys so they don't bleed into each other.
+  const cacheKey = `${p.type}:${p.id}:${isPro ? "ai" : "heur"}`;
   const cached = bestClipCacheGet(cacheKey);
   if (cached) {
     res.setHeader("x-cache", "HIT");
+    res.setHeader("x-tier", isPro ? "pro" : "free");
     res.json(cached);
     return;
   }
@@ -253,6 +284,7 @@ router.get("/director/best-clip/:type/:id", async (req, res) => {
       const empty: BestClipResult = { youtubeId: null, kind: null, name: null, reason: null };
       bestClipCacheSet(cacheKey, empty);
       res.setHeader("x-cache", "MISS");
+      res.setHeader("x-tier", isPro ? "pro" : "free");
       res.json(empty);
       return;
     }
@@ -286,7 +318,7 @@ router.get("/director/best-clip/:type/:id", async (req, res) => {
     }));
 
     let aiPick: { idx: number; reason: string } | null = null;
-    if (candidates.length > 1) {
+    if (candidates.length > 1 && isPro) {
       try {
         const completion = await openai.chat.completions.create({
           model: "gpt-5.4",
@@ -327,6 +359,7 @@ router.get("/director/best-clip/:type/:id", async (req, res) => {
     };
     bestClipCacheSet(cacheKey, result);
     res.setHeader("x-cache", "MISS");
+    res.setHeader("x-tier", isPro ? "pro" : "free");
     res.json(result);
   } catch (e) {
     req.log?.error({ err: String(e) }, "best-clip failed");

@@ -9,6 +9,8 @@ import {
   setIdentityCookie,
   clearIdentityCookie,
 } from "../middlewares/identity";
+import { isAdminUser } from "../lib/auth-guards";
+import { chatQuotaSnapshot } from "../lib/rate-limit";
 
 const router: IRouter = Router();
 
@@ -16,17 +18,31 @@ const ClaimBody = z.object({
   email: z.string().email().max(200),
 });
 
-function publicUser(user: NonNullable<Awaited<ReturnType<typeof getUserById>>>) {
+function publicUser(
+  user: NonNullable<Awaited<ReturnType<typeof getUserById>>>,
+  ip: string | null,
+) {
+  const isPro = isProActive(user);
+  const isAdmin = isAdminUser(user);
+  const quota = chatQuotaSnapshot({ userId: user.id, ip, isPro });
   return {
     id: user.id,
     username: user.username,
     email: user.email,
     displayName: user.displayName ?? user.username,
     avatarUrl: user.avatarUrl,
-    isPro: isProActive(user),
+    isPro,
+    isAdmin,
+    isBanned: user.isBanned,
     proUntil: user.proUntil?.toISOString() ?? null,
     proPlan: user.proPlan,
     proCancelAtPeriodEnd: user.proCancelAtPeriodEnd,
+    chatQuota: {
+      used: quota.used,
+      limit: quota.limit,
+      remaining: quota.remaining,
+      resetAt: quota.resetAt,
+    },
   };
 }
 
@@ -40,7 +56,7 @@ router.post("/identity/claim", async (req, res) => {
   try {
     const user = await findOrCreateUserByEmail(parsed.data.email);
     setIdentityCookie(res, user.id);
-    res.json(publicUser(user));
+    res.json(publicUser(user, req.ip ?? null));
   } catch (err) {
     req.log?.error({ err: String(err) }, "claim failed");
     res.status(500).json({ error: "Could not claim identity" });
@@ -57,7 +73,7 @@ router.get("/identity/me", async (req, res) => {
     clearIdentityCookie(res);
     return res.json({ user: null });
   }
-  res.json({ user: publicUser(user) });
+  res.json({ user: publicUser(user, req.ip ?? null) });
 });
 
 /* POST /api/identity/signout */

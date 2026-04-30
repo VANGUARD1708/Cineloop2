@@ -25,6 +25,7 @@ import MoodMatchPage from "@/pages/MoodMatchPage";
 import AccountPage from "@/pages/AccountPage";
 import SearchPage from "@/pages/SearchPage";
 import TastePage from "@/pages/TastePage";
+import AdminPage from "@/pages/AdminPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -53,6 +54,7 @@ function Router() {
         <Route path="/notifications" component={NotificationsPage} />
         <Route path="/pricing" component={PricingPage} />
         <Route path="/pay/return" component={PayReturnPage} />
+        <Route path="/admin" component={AdminPage} />
         <Route component={NotFound} />
       </Switch>
     </Shell>

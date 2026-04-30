@@ -1,5 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 
+export interface ChatQuota {
+  used: number;
+  limit: number;
+  remaining: number;
+  resetAt: number;
+}
+
 export interface Identity {
   id: number;
   username: string;
@@ -7,9 +14,12 @@ export interface Identity {
   displayName: string;
   avatarUrl: string;
   isPro: boolean;
+  isAdmin: boolean;
+  isBanned: boolean;
   proUntil: string | null;
   proPlan: string | null;
   proCancelAtPeriodEnd: boolean;
+  chatQuota: ChatQuota;
 }
 
 interface IdentityContextValue {

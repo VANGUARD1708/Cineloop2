@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Home, Flame, Compass, Users, User, Trophy, PlusSquare, Crown, Sparkles, LogIn, Settings } from "lucide-react";
+import { Home, Flame, Compass, Users, User, Trophy, PlusSquare, Crown, Sparkles, LogIn, Settings, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIdentity } from "@/hooks/useIdentity";
 import ClaimDialog from "@/components/identity/ClaimDialog";
@@ -117,6 +117,22 @@ export function Shell({ children }: { children: React.ReactNode }) {
             Upload
           </div>
         </Link>
+
+        {!loading && user?.isAdmin && (
+          <Link href="/admin" className="w-full" data-testid="link-sidebar-admin">
+            <div
+              className={cn(
+                "flex items-center gap-3 px-3 py-3 rounded-md transition-all cursor-pointer font-medium border mt-2",
+                location === "/admin"
+                  ? "bg-rose-500/15 border-rose-500/40 text-rose-100"
+                  : "border-white/10 text-rose-300/80 hover:text-rose-100 hover:bg-rose-500/10",
+              )}
+            >
+              <Shield size={20} />
+              Admin
+            </div>
+          </Link>
+        )}
       </aside>
 
       {/* Main Content */}

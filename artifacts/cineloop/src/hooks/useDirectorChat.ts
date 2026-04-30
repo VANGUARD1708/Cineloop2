@@ -13,10 +13,17 @@ export interface ChatPick {
 
 export interface ChatTurn {
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "system";
   text: string;
   picks?: ChatPick[];
   ts: number;
+  upgradeCta?: boolean;
+}
+
+export interface ChatLimit {
+  used: number;
+  limit: number;
+  resetAt: number;
 }
 
 interface SendOptions {
@@ -38,6 +45,7 @@ export default function useDirectorChat() {
   const [turns, setTurns] = useState<ChatTurn[]>([WELCOME]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [quota, setQuota] = useState<ChatLimit | null>(null);
 
   const send = async (text: string, ctx?: SendOptions) => {
     const trimmed = text.trim();
@@ -68,6 +76,38 @@ export default function useDirectorChat() {
             : undefined,
         }),
       });
+
+      // Pull live quota info from headers regardless of status.
+      const remaining = r.headers.get("x-ratelimit-remaining");
+      const limit = r.headers.get("x-ratelimit-limit");
+      const reset = r.headers.get("x-ratelimit-reset");
+      if (limit && remaining) {
+        const lim = Number(limit);
+        const rem = Number(remaining);
+        setQuota({
+          used: Math.max(0, lim - rem),
+          limit: lim,
+          resetAt: reset ? Number(reset) * 1000 : 0,
+        });
+      }
+
+      if (r.status === 429) {
+        const data = await r.json().catch(() => ({}));
+        setTurns((t) => [
+          ...t,
+          {
+            id: crypto.randomUUID(),
+            role: "system",
+            text:
+              data?.message ||
+              "Free plan: 5 chats / day. Upgrade to Pro for unlimited.",
+            ts: Date.now(),
+            upgradeCta: !!data?.upgrade,
+          },
+        ]);
+        return;
+      }
+
       if (!r.ok) throw new Error("ai_failed");
       const data = (await r.json()) as { reply: string; picks: ChatPick[] };
       setTurns((t) => [
@@ -101,5 +141,5 @@ export default function useDirectorChat() {
     setError(null);
   };
 
-  return { turns, send, pending, error, reset };
+  return { turns, send, pending, error, reset, quota };
 }

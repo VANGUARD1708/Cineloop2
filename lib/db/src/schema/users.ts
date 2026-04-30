@@ -21,6 +21,10 @@ export const usersTable = pgTable("users", {
   proPlan: text("pro_plan"),
   proCancelAtPeriodEnd: boolean("pro_cancel_at_period_end").notNull().default(false),
   lastClaimedAt: timestamp("last_claimed_at"),
+  isAdmin: boolean("is_admin").notNull().default(false),
+  isBanned: boolean("is_banned").notNull().default(false),
+  bannedReason: text("banned_reason"),
+  bannedAt: timestamp("banned_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

@@ -94,3 +94,20 @@ Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHea
 ### `scripts` (`@workspace/scripts`)
 
 Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+
+## CineLoop App Features
+
+### Payments (`/api/payments`)
+- Three providers: Stripe, Paystack, Flutterwave (all gracefully disable if env vars missing)
+- `GET /providers` returns availability + USD prices
+- `POST /checkout` creates real provider checkout session, returns redirect URL
+- `GET /verify` confirms payment after redirect
+- Webhook stubs at `/webhooks/{provider}`
+- Currency conversion: USD→NGN at 1600:1 for Paystack (test accounts often only support NGN)
+- Frontend: `PricingPage`, `TipJarButton`, `PayReturnPage`
+
+### AI Mood Match (`/api/mood`)
+- `POST /recommend` — takes a free-form prompt, returns 8 curated picks enriched with TMDB data
+- Uses OpenAI gpt-5.4 via `@workspace/integrations-openai-ai-server` (no key needed; Replit AI Integrations proxy)
+- Each pick includes: title, year, mediaType, AI reasoning, vibe tagline, TMDB poster/backdrop/rating/overview
+- Frontend route `/mood` — gradient hero, prompt textarea, suggestion chips, animated card grid

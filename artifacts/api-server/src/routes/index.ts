@@ -9,6 +9,7 @@ import feedRouter from "./feed";
 import notificationsRouter from "./notifications";
 import tmdbProxyRouter from "./tmdb-proxy";
 import paymentsRouter from "./payments";
+import moodRouter from "./mood";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,8 @@ router.use("/tmdb", tmdbProxyRouter);
 
 /* monetization */
 router.use("/payments", paymentsRouter);
+
+/* AI mood match */
+router.use("/mood", moodRouter);
 
 export default router;

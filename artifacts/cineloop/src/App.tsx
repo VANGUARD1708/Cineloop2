@@ -20,6 +20,7 @@ import UploadPage from "@/pages/UploadPage";
 import NotificationsPage from "@/pages/NotificationsPage";
 import PricingPage from "@/pages/PricingPage";
 import PayReturnPage from "@/pages/PayReturnPage";
+import MoodMatchPage from "@/pages/MoodMatchPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,6 +38,7 @@ function Router() {
         <Route path="/" component={FeedPage} />
         <Route path="/trending" component={TrendingPage} />
         <Route path="/discover" component={DiscoverPage} />
+        <Route path="/mood" component={MoodMatchPage} />
         <Route path="/characters" component={CharactersPage} />
         <Route path="/profile" component={ProfilePage} />
         <Route path="/leaderboard" component={LeaderboardPage} />

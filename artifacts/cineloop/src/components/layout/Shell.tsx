@@ -1,11 +1,12 @@
 import { Link, useLocation } from "wouter";
-import { Home, Flame, Compass, Users, User, Trophy, PlusSquare, Crown } from "lucide-react";
+import { Home, Flame, Compass, Users, User, Trophy, PlusSquare, Crown, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/", label: "Feed", icon: Home },
   { href: "/trending", label: "Trending", icon: Flame },
   { href: "/discover", label: "Discover", icon: Compass },
+  { href: "/mood", label: "Mood Match", icon: Sparkles, accent: true },
   { href: "/characters", label: "Characters", icon: Users },
   { href: "/profile", label: "Profile", icon: User },
   { href: "/leaderboard", label: "Rankings", icon: Trophy },
@@ -36,10 +37,18 @@ export function Shell({ children }: { children: React.ReactNode }) {
                     "flex items-center gap-3 px-3 py-3 rounded-md transition-all cursor-pointer font-medium",
                     isActive
                       ? "bg-primary text-primary-foreground shadow-[0_0_15px_rgba(220,20,60,0.3)]"
+                      : item.accent
+                      ? "text-rose-200 hover:text-white hover:bg-white/5 bg-gradient-to-r from-rose-500/5 to-violet-500/5 border border-white/[0.04]"
                       : "text-muted-foreground hover:text-white hover:bg-white/5"
                   )}
                 >
-                  <Icon size={20} className={cn(isActive && "text-white")} />
+                  <Icon
+                    size={20}
+                    className={cn(
+                      isActive && "text-white",
+                      !isActive && item.accent && "text-rose-300"
+                    )}
+                  />
                   {item.label}
                 </div>
               </Link>

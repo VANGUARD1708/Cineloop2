@@ -7,3 +7,4 @@ export * from "./payments";
 export * from "./watch_history";
 export * from "./webhook_events";
 export * from "./taste_profiles";
+export * from "./media_reactions";

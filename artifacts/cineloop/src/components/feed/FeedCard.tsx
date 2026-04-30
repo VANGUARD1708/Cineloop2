@@ -7,9 +7,14 @@ import {
   Volume2,
   VolumeX,
   Sparkles,
+  MessageCircle,
+  Star,
 } from "lucide-react";
 import WatchNowButton from "./WatchNowButton";
+import CommentsSheet from "./CommentsSheet";
 import { useWatchAnalytics } from "@/hooks/useWatchAnalytics";
+import useMediaReactions from "@/hooks/useMediaReactions";
+import useMediaDetails from "@/hooks/useMediaDetails";
 
 interface Props {
   item: any;
@@ -19,6 +24,21 @@ function tmdbPath(url?: string): string | null {
   if (!url) return null;
   const m = url.match(/\/t\/p\/[^/]+(\/.+)$/);
   return m ? m[1] : null;
+}
+
+function formatRuntime(min: number | null | undefined): string | null {
+  if (!min || min <= 0) return null;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
+}
+
+function formatCount(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10000 ? 1 : 0).replace(/\.0$/, "")}K`;
+  return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
 }
 
 export default function FeedCard({ item }: Props) {
@@ -33,14 +53,21 @@ export default function FeedCard({ item }: Props) {
   const [muted, setMuted] = useState(true);
   const [burst, setBurst] = useState(false);
   const [iframeReady, setIframeReady] = useState(false);
-
-  const [liked, setLiked] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [likeCount, setLikeCount] = useState(episode.likes ?? 0);
+  const [trailerLoaded, setTrailerLoaded] = useState(false);
+  const [showOverview, setShowOverview] = useState(false);
+  const [showComments, setShowComments] = useState(false);
 
   const [youtubeId, setYoutubeId] = useState<string | null>(null);
 
   const lastTap = useRef(0);
+
+  const mediaType: string = film?.type || "movie";
+  const mediaId: string = film?.id ? String(film.id) : "";
+
+  const reactions = useMediaReactions(mediaType, mediaId);
+  const details = useMediaDetails(mediaType, mediaId);
+  // commentCount is bundled into the /reactions response — no extra fetch per card.
+  const commentCount = reactions.commentCount;
 
   useWatchAnalytics({
     isVisible,
@@ -56,21 +83,15 @@ export default function FeedCard({ item }: Props) {
       ([entry]) => setIsVisible(entry.isIntersecting),
       { threshold: 0.6 }
     );
-
     if (cardRef.current) observer.observe(cardRef.current);
     return () => observer.disconnect();
   }, []);
 
   const sendCommand = (func: string) => {
     if (!iframeReady) return;
-
     iframeRef.current?.contentWindow?.postMessage(
-      JSON.stringify({
-        event: "command",
-        func,
-        args: []
-      }),
-      "*"
+      JSON.stringify({ event: "command", func, args: [] }),
+      "*",
     );
   };
 
@@ -85,38 +106,42 @@ export default function FeedCard({ item }: Props) {
       sendCommand("playVideo");
       sendCommand("mute");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isVisible, youtubeId, iframeReady]);
 
   useEffect(() => {
+    let cancelled = false;
     const loadVideo = async () => {
       try {
         if (!film?.id) return;
-
         const res = await fetch(
-          `/api/tmdb/videos?id=${film.id}&type=${film.type || "movie"}`
+          `/api/tmdb/videos?id=${film.id}&type=${film.type || "movie"}`,
         );
-
         const data = await res.json();
-
         const video =
           data?.results?.find(
-            (v: any) => v.site === "YouTube" && v.type === "Trailer"
-          ) ||
-          data?.results?.find((v: any) => v.site === "YouTube");
-
-        if (video?.key) setYoutubeId(video.key);
-      } catch (e) {
-        console.error("video load failed", e);
+            (v: any) => v.site === "YouTube" && v.type === "Trailer",
+          ) || data?.results?.find((v: any) => v.site === "YouTube");
+        if (!cancelled && video?.key) setYoutubeId(video.key);
+      } catch {
+        // poster fallback handles failure silently
       }
     };
-
     loadVideo();
-  }, [film?.id]);
+    return () => {
+      cancelled = true;
+    };
+  }, [film?.id, film?.type]);
 
   const iframeSrc = useMemo(() => {
     if (!youtubeId || typeof window === "undefined") return null;
-
-    return `https://www.youtube.com/embed/${youtubeId}?autoplay=1&mute=1&playsinline=1&controls=0&disablekb=1&fs=0&iv_load_policy=3&modestbranding=1&rel=0&loop=1&playlist=${youtubeId}&enablejsapi=1&origin=${window.location.origin}`;
+    // youtube-nocookie + a stable origin are friendlier inside proxied iframes
+    return (
+      `https://www.youtube-nocookie.com/embed/${youtubeId}` +
+      `?autoplay=1&mute=1&playsinline=1&controls=0&disablekb=1&fs=0` +
+      `&iv_load_policy=3&modestbranding=1&rel=0&loop=1&playlist=${youtubeId}` +
+      `&enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}`
+    );
   }, [youtubeId]);
 
   const handleTap = () => {
@@ -127,53 +152,67 @@ export default function FeedCard({ item }: Props) {
     } else if (youtubeId) {
       paused ? sendCommand("playVideo") : sendCommand("pauseVideo");
     }
-
     setPaused(!paused);
   };
 
   const handleSoundToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
-
     if (episode.videoUrl) {
       const newMuted = !muted;
       if (videoRef.current) videoRef.current.muted = newMuted;
       setMuted(newMuted);
       return;
     }
-
     muted ? sendCommand("unMute") : sendCommand("mute");
     setMuted(!muted);
   };
 
   const handleDoubleTap = () => {
     const now = Date.now();
-    if (now - lastTap.current < 300) triggerLike();
-    lastTap.current = now;
-  };
-
-  const triggerLike = () => {
-    if (!liked) {
-      setLiked(true);
-      setLikeCount((c: number) => c + 1);
+    if (now - lastTap.current < 300) {
+      reactions.like();
       setBurst(true);
       setTimeout(() => setBurst(false), 600);
     }
+    lastTap.current = now;
+  };
+
+  const handleLikeClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!reactions.liked) {
+      setBurst(true);
+      setTimeout(() => setBurst(false), 600);
+    }
+    reactions.toggleLike();
   };
 
   const handleShare = async (e: any) => {
     e.stopPropagation();
     const url = window.location.href;
-
     if (navigator.share) {
-      await navigator.share({
-        title: film.title,
-        text: `Watch ${film.title}`,
-        url,
-      });
+      try {
+        await navigator.share({
+          title: film.title,
+          text: `Watch ${film.title}`,
+          url,
+        });
+      } catch {
+        // user cancelled
+      }
     } else {
       navigator.clipboard.writeText(url);
     }
   };
+
+  const detailsData = details.data;
+  const year = detailsData?.year ?? film?.year ?? null;
+  const runtimeLabel = formatRuntime(detailsData?.runtime ?? null);
+  const genres = detailsData?.genres ?? [];
+  const rating = detailsData?.voteAverage ?? null;
+  const overview = (detailsData?.overview || film?.overview || "").trim();
+
+  const posterFallback = film?.backdrop || film?.poster || null;
+  const hasTrailer = Boolean(episode.videoUrl) || Boolean(youtubeId);
 
   return (
     <div
@@ -183,8 +222,23 @@ export default function FeedCard({ item }: Props) {
         handleTap();
         handleDoubleTap();
       }}
+      data-testid="feed-card"
     >
-      {episode.videoUrl ? (
+      {/* Layer 1: poster fallback always rendered as the floor — guarantees we never
+          show a black void while the trailer is fetching/blocked. */}
+      {posterFallback && (
+        <img
+          src={posterFallback}
+          alt=""
+          aria-hidden
+          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${
+            trailerLoaded ? "opacity-40" : "opacity-100"
+          }`}
+        />
+      )}
+
+      {/* Layer 2: native episode video (highest fidelity if present) */}
+      {episode.videoUrl && (
         <video
           ref={videoRef}
           src={episode.videoUrl}
@@ -192,26 +246,38 @@ export default function FeedCard({ item }: Props) {
           loop
           playsInline
           autoPlay
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-      ) : iframeSrc ? (
-        <iframe
-          ref={iframeRef}
-          src={iframeSrc}
-          loading="lazy"
-          onLoad={() => setIframeReady(true)}
-          allow="autoplay; encrypted-media"
-          allowFullScreen
-          className="absolute inset-0 w-full h-full object-cover border-0 pointer-events-none"
-        />
-      ) : (
-        <img
-          src={film.backdrop || film.poster}
+          onLoadedData={() => setTrailerLoaded(true)}
           className="absolute inset-0 w-full h-full object-cover"
         />
       )}
 
-      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-black/70 z-10" />
+      {/* Layer 3: YouTube trailer — fades in once loaded so the poster is visible underneath. */}
+      {!episode.videoUrl && iframeSrc && (
+        <iframe
+          ref={iframeRef}
+          src={iframeSrc}
+          loading="lazy"
+          onLoad={() => {
+            setIframeReady(true);
+            setTrailerLoaded(true);
+          }}
+          allow="autoplay; encrypted-media; picture-in-picture"
+          allowFullScreen
+          title={film?.title || "Trailer"}
+          className={`absolute inset-0 w-full h-full object-cover border-0 pointer-events-none transition-opacity duration-700 ${
+            iframeReady ? "opacity-100" : "opacity-0"
+          }`}
+        />
+      )}
+
+      {/* "No trailer available" tag when truly absent */}
+      {!hasTrailer && posterFallback && (
+        <div className="absolute top-6 left-4 z-30 px-2 py-1 bg-black/60 backdrop-blur-sm rounded text-[10px] uppercase tracking-wider text-zinc-400">
+          Poster
+        </div>
+      )}
+
+      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-black/60 z-10 pointer-events-none" />
 
       {burst && (
         <div className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none">
@@ -219,8 +285,8 @@ export default function FeedCard({ item }: Props) {
         </div>
       )}
 
-      {paused && (
-        <div className="absolute inset-0 flex items-center justify-center z-20">
+      {paused && hasTrailer && (
+        <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
           <div className="bg-black/50 w-16 h-16 rounded-full flex items-center justify-center">
             <Play className="w-8 h-8 text-white fill-white ml-1" />
           </div>
@@ -229,7 +295,8 @@ export default function FeedCard({ item }: Props) {
 
       <button
         onClick={handleSoundToggle}
-        className="absolute top-6 right-4 z-50 bg-black/50 p-2 rounded-full"
+        className="absolute top-6 right-4 z-50 bg-black/60 backdrop-blur-sm p-2 rounded-full"
+        aria-label={muted ? "Unmute" : "Mute"}
       >
         {muted ? (
           <VolumeX className="w-5 h-5 text-white" />
@@ -238,36 +305,61 @@ export default function FeedCard({ item }: Props) {
         )}
       </button>
 
+      {/* Action rail */}
       <div className="absolute right-3 bottom-32 flex flex-col items-center gap-5 z-20">
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            triggerLike();
-          }}
+          onClick={handleLikeClick}
+          className="flex flex-col items-center"
+          aria-label={reactions.liked ? "Unlike" : "Like"}
+          data-testid="feed-like-btn"
         >
           <Heart
-            className={`w-7 h-7 ${
-              liked ? "text-[#DC143C] fill-[#DC143C]" : "text-white"
+            className={`w-7 h-7 transition-transform ${
+              reactions.liked
+                ? "text-[#DC143C] fill-[#DC143C] scale-110"
+                : "text-white drop-shadow-md"
             }`}
           />
-          <span className="text-xs">{likeCount}</span>
+          <span className="text-[11px] font-semibold mt-0.5 drop-shadow-md">
+            {formatCount(reactions.likeCount)}
+          </span>
         </button>
 
         <button
           onClick={(e) => {
             e.stopPropagation();
-            setSaved(!saved);
+            setShowComments(true);
           }}
+          className="flex flex-col items-center"
+          aria-label="Open comments"
+          data-testid="feed-comment-btn"
+        >
+          <MessageCircle className="w-7 h-7 text-white drop-shadow-md" />
+          <span className="text-[11px] font-semibold mt-0.5 drop-shadow-md">
+            {formatCount(commentCount)}
+          </span>
+        </button>
+
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            reactions.toggleBookmark();
+          }}
+          className="flex flex-col items-center"
+          aria-label={reactions.saved ? "Remove from watchlist" : "Save to watchlist"}
+          data-testid="feed-bookmark-btn"
         >
           <Bookmark
             className={`w-7 h-7 ${
-              saved ? "text-yellow-400 fill-yellow-400" : "text-white"
+              reactions.saved
+                ? "text-yellow-400 fill-yellow-400"
+                : "text-white drop-shadow-md"
             }`}
           />
         </button>
 
-        <button onClick={handleShare}>
-          <Share2 className="w-7 h-7 text-white" />
+        <button onClick={handleShare} aria-label="Share" className="flex flex-col items-center">
+          <Share2 className="w-7 h-7 text-white drop-shadow-md" />
         </button>
       </div>
 
@@ -280,14 +372,72 @@ export default function FeedCard({ item }: Props) {
         </div>
       )}
 
+      {/* Bottom info card */}
       <div className="absolute bottom-0 left-0 right-20 p-4 pb-6 z-20">
-        <h2 className="text-xl font-black mb-2">{film.title}</h2>
-        <WatchNowButton
-          filmId={film.id}
-          type={film.type}
-          title={film.title}
-        />
+        <h2
+          className="text-xl font-black mb-1 leading-tight drop-shadow-lg"
+          data-testid="feed-title"
+        >
+          {film.title}
+        </h2>
+
+        {/* Metadata strip */}
+        {(year || runtimeLabel || rating || genres.length > 0) && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-zinc-200 mb-2 drop-shadow">
+            {year && <span className="font-medium">{year}</span>}
+            {runtimeLabel && (
+              <>
+                <span className="text-zinc-500">•</span>
+                <span>{runtimeLabel}</span>
+              </>
+            )}
+            {rating !== null && rating > 0 && (
+              <>
+                <span className="text-zinc-500">•</span>
+                <span className="flex items-center gap-1">
+                  <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+                  <span className="font-semibold">{rating.toFixed(1)}</span>
+                </span>
+              </>
+            )}
+            {genres.length > 0 && (
+              <>
+                <span className="text-zinc-500">•</span>
+                <span className="text-zinc-300">{genres.slice(0, 2).join(" / ")}</span>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Overview — clamped, expandable */}
+        {overview && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowOverview((s) => !s);
+            }}
+            className="block text-left text-[13px] text-zinc-300 mb-3 leading-snug drop-shadow"
+            data-testid="feed-overview"
+          >
+            <span className={showOverview ? "" : "line-clamp-2"}>{overview}</span>
+            {overview.length > 120 && (
+              <span className="text-zinc-500 ml-1 text-[12px]">
+                {showOverview ? "less" : "more"}
+              </span>
+            )}
+          </button>
+        )}
+
+        <WatchNowButton filmId={film.id} type={film.type} title={film.title} />
       </div>
+
+      <CommentsSheet
+        open={showComments}
+        onClose={() => setShowComments(false)}
+        mediaType={mediaType}
+        mediaId={mediaId}
+        mediaTitle={film?.title}
+      />
     </div>
   );
 }

@@ -173,3 +173,24 @@ Frontend:
 - `pages/TastePage.tsx` at `/taste` — "Director's read" hero, vibe quote, summary, genre/theme/decade pill clouds, refresh button.
 - DiscoverPage renders `DailyMoodBanner → ForYouRail → ContinueWatchingStrip → Archive`. Both new components return `null` for anon users.
 - Linked from AccountPage as "Your cinematic taste".
+
+### Feed reactions, comments, and details (`/api/media`)
+Per-media interactions keyed by `(mediaType, mediaId)` so they work for any TMDB title without needing a `posts` table.
+
+- `GET /media/:type/:id/details` — proxies TMDB; returns `{ title, year, runtime, overview, genres, voteAverage, voteCount, tagline, seasons, episodes }`. Used for the FeedCard metadata strip.
+- `GET /media/:type/:id/reactions` — public; returns `{ liked, saved, likeCount, bookmarkCount, commentCount }`. The single round-trip per card includes commentCount so we don't N+1 fetch the full comment list per visible card.
+- `POST|DELETE /media/:type/:id/like` (auth) and `POST|DELETE /media/:type/:id/bookmark` (auth) — toggle persistent reactions.
+- `GET /media/:type/:id/comments` — public, last 100 newest-first, joined with `users` for display name + avatar.
+- `POST /media/:type/:id/comments` (auth) — body validated by zod (`text` 1–500 chars).
+- `DELETE /media/comments/:commentId` (auth, owner only).
+
+Schema (in `lib/db`):
+- `media_reactions` (`user_id`, `media_type`, `media_id`, `kind` unique; kind = `like` | `bookmark`).
+- `media_comments` (`user_id`, `media_type`, `media_id`, `text`, `created_at`).
+
+Frontend:
+- `useMediaReactions(type, id)` — react-query + optimistic mutate. Uses a per-instance sequence token so out-of-order responses (rapid like→unlike) cannot overwrite the latest intent; `onSettled` invalidates to converge with server truth.
+- `useMediaComments(type, id, { enabled })` — list + add/remove with optimistic mutations; bumps the cached `commentCount` on the reactions query so the FeedCard badge updates instantly.
+- `useMediaDetails(type, id)` — 24h staleTime since TMDB metadata is essentially static.
+- `FeedCard.tsx` — poster/backdrop is the always-rendered floor with the YouTube iframe (now `youtube-nocookie.com`) fading in on top once loaded; metadata strip (year • runtime • ★ rating • genres) and expandable overview live under the title; 4-button rail (heart, message-circle, bookmark, share); 401 from the like/bookmark mutations is a soft no-op for anon users. Test ids: `feed-card`, `feed-title`, `feed-overview`, `feed-like-btn`, `feed-comment-btn`, `feed-bookmark-btn`.
+- `CommentsSheet.tsx` — drag-to-dismiss bottom sheet, anonymous post shows inline "Sign in to comment.", own-comment delete button, relative timestamps. Stops `onClick`/`onPointerDown`/`onTouchStart` propagation on overlay AND body so taps inside don't trigger the FeedCard's tap-to-pause / double-tap-to-like handler. Test ids: `comments-sheet`, `comment-item`, `comment-input`, `comment-send`.

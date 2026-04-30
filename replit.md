@@ -1,196 +1,60 @@
-# Workspace
+# Overview
 
-## Overview
+This project is a pnpm workspace monorepo using TypeScript, designed to build a comprehensive cinematic experience platform called CineLoop. The platform offers features like personalized content recommendations driven by AI, watch history tracking, user authentication, and payment processing for premium features. The core vision is to create a highly engaging and personalized media consumption experience for users, leveraging modern web technologies and AI to curate content and facilitate seamless interactions.
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+# User Preferences
 
-## Stack
+I prefer clear and concise communication.
+I value an iterative development approach with frequent, small updates.
+Please ask for confirmation before implementing major architectural changes or adding new external dependencies.
+I prefer detailed explanations when complex logic or new patterns are introduced.
+Do not make changes to files within the `lib/api-spec/` directory without explicit instruction.
 
-- **Monorepo tool**: pnpm workspaces
-- **Node.js version**: 24
-- **Package manager**: pnpm
-- **TypeScript version**: 5.9
-- **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
+# System Architecture
 
-## Structure
+The project is structured as a pnpm monorepo, facilitating shared libraries and modular development. It uses Node.js 24, pnpm for package management, and TypeScript 5.9.
 
-```text
-artifacts-monorepo/
-├── artifacts/              # Deployable applications
-│   └── api-server/         # Express API server
-├── lib/                    # Shared libraries
-│   ├── api-spec/           # OpenAPI spec + Orval codegen config
-│   ├── api-client-react/   # Generated React Query hooks
-│   ├── api-zod/            # Generated Zod schemas from OpenAPI
-│   └── db/                 # Drizzle ORM schema + DB connection
-├── scripts/                # Utility scripts (single workspace package)
-│   └── src/                # Individual .ts scripts, run via `pnpm --filter @workspace/scripts run <script>`
-├── pnpm-workspace.yaml     # pnpm workspace (artifacts/*, lib/*, lib/integrations/*, scripts)
-├── tsconfig.base.json      # Shared TS options (composite, bundler resolution, es2022)
-├── tsconfig.json           # Root TS project references
-└── package.json            # Root package with hoisted devDeps
-```
+**Backend Architecture:**
+The backend is built with Express 5, providing a robust API server. Data persistence is handled by PostgreSQL with Drizzle ORM. Zod is used for API request and response validation, ensuring data integrity. API codegen is managed by Orval from an OpenAPI specification, generating React Query hooks for the frontend and Zod schemas for validation.
 
-## TypeScript & Composite Projects
+**Monorepo Structure:**
+- `artifacts/`: Contains deployable applications, specifically `api-server`.
+- `lib/`: Houses shared libraries such as `api-spec` (OpenAPI), `api-client-react` (generated React Query hooks), `api-zod` (generated Zod schemas), and `db` (Drizzle ORM).
+- `scripts/`: Holds utility scripts for various development tasks.
 
-Every package extends `tsconfig.base.json` which sets `composite: true`. The root `tsconfig.json` lists all packages as project references. This means:
+**TypeScript Configuration:**
+Each package is a composite TypeScript project, inheriting from `tsconfig.base.json`. Typechecking and declaration file generation (`.d.ts`) are performed at the root level using `tsc --build --emitDeclarationOnly`, ensuring correct cross-package dependency resolution.
 
-- **Always typecheck from the root** — run `pnpm run typecheck` (which runs `tsc --build --emitDeclarationOnly`). This builds the full dependency graph so that cross-package imports resolve correctly. Running `tsc` inside a single package will fail if its dependencies haven't been built yet.
-- **`emitDeclarationOnly`** — we only emit `.d.ts` files during typecheck; actual JS bundling is handled by esbuild/tsx/vite...etc, not `tsc`.
-- **Project references** — when package A depends on package B, A's `tsconfig.json` must list B in its `references` array. `tsc --build` uses this to determine build order and skip up-to-date packages.
+**Core Features:**
 
-## Root Scripts
+*   **Payments:** Integrates with Stripe, Paystack, and Flutterwave for secure payment processing. Includes webhook handling with idempotency and a robust pro-subscription grant flow. Currency conversion is implemented for international transactions.
+*   **Identity:** Provides a lightweight, email-only sign-in system using HMAC-signed cookies for user authentication.
+*   **Subscription:** Manages user subscriptions, including cancellation and resumption of pro plans.
+*   **Watch History:** Tracks user media progress, allowing for continuation of partially watched content and access to full viewing history.
+*   **Search:** Integrates with TMDB for comprehensive media search functionality.
+*   **Error Handling:** Implements client-side error boundaries and polished error pages for a smooth user experience.
+*   **AI Mood Match:** Leverages OpenAI for recommending curated media picks based on free-form prompts, enriching recommendations with TMDB data, AI reasoning, and vibe taglines.
+*   **AI Director Mode:** Creates personalized cinematic experiences by analyzing user watch history to generate taste profiles, personalized content recommendations ("for-you"), daily mood-based suggestions, and "because you watched" recommendations. This feature uses advanced caching and drift detection for taste profiles.
+*   **AI Director Co-pilot:** Floating dock chat (`POST /api/director/chat`) grounded in the user's `watch_history` + `taste_profiles.vibe` returns natural-language replies plus structured TMDB-enriched picks (poster, year, vote, reason). Supports voice input via the Web Speech API directly inside the dock.
+*   **Smart Auto-Clipping:** `GET /api/director/best-clip/:type/:id` ranks all YouTube videos for a title with a heuristic (trailer > teaser > clip > featurette + recency) then asks GPT-5.4 to re-rank the top 5 for "most cinematic 6-second hook." Result is cached in-memory for 7 days (with LRU-style eviction at 5K entries) and surfaces an `aiCurated: true` flag plus a one-line reason badge in the FeedCard.
+*   **Live Presence + Watch-Party:** `GET /api/director/presence/:type/:id` returns a deterministic per-(mediaId, 5-minute-bucket) viewer count using FNV-1a hashing, producing a long-tail distribution that feels live without DB writes. Pairs with a "Watch party" share button that copies a `?party=<token>&watch=<type:id>` link.
+*   **Adaptive Cinematic Theme:** `usePalette` hook samples a 32×32 canvas crop of the poster/backdrop, scores 64 color buckets by saturation × pixel-count, and exports an `--cl-accent` CSS custom property used by the vignette, ambient particles, presence glow, AI-hook badge, and like burst. Routes TMDB images through `GET /api/tmdb/img` (CORS-safe proxy with allowlist, redirect re-validation, 8s timeout, 6 MiB cap, image-type check) so canvas reads aren't tainted.
+*   **Spatial 3D Feed:** Mouse-only parallax tilt (-4°..+4° via rAF-throttled `transform: rotateX/Y`) on a `perspective: 1400px` wrapper around media layers, plus palette-tinted CSS-animated drifting particles. Tilt + particles automatically disable when `prefers-reduced-motion` is set.
+*   **Media Interactions:** Enables user reactions (likes, bookmarks) and comments on media items, with optimistic UI updates and real-time reflection of changes.
+*   **UI/UX:** Features a dynamic `FeedCard` component with video playback, metadata display, and interactive elements. `CommentsSheet` provides a drag-to-dismiss interface for engaging with comments. Specific test IDs are provided for various components to aid in testing.
 
-- `pnpm run build` — runs `typecheck` first, then recursively runs `build` in all packages that define it
-- `pnpm run typecheck` — runs `tsc --build --emitDeclarationOnly` using project references
+# External Dependencies
 
-## Packages
-
-### `artifacts/api-server` (`@workspace/api-server`)
-
-Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` for request and response validation and `@workspace/db` for persistence.
-
-- Entry: `src/index.ts` — reads `PORT`, starts Express
-- App setup: `src/app.ts` — mounts CORS, JSON/urlencoded parsing, routes at `/api`
-- Routes: `src/routes/index.ts` mounts sub-routers; `src/routes/health.ts` exposes `GET /health` (full path: `/api/health`)
-- Depends on: `@workspace/db`, `@workspace/api-zod`
-- `pnpm --filter @workspace/api-server run dev` — run the dev server
-- `pnpm --filter @workspace/api-server run build` — production esbuild bundle (`dist/index.cjs`)
-- Build bundles an allowlist of deps (express, cors, pg, drizzle-orm, zod, etc.) and externalizes the rest
-
-### `lib/db` (`@workspace/db`)
-
-Database layer using Drizzle ORM with PostgreSQL. Exports a Drizzle client instance and schema models.
-
-- `src/index.ts` — creates a `Pool` + Drizzle instance, exports schema
-- `src/schema/index.ts` — barrel re-export of all models
-- `src/schema/<modelname>.ts` — table definitions with `drizzle-zod` insert schemas (no models definitions exist right now)
-- `drizzle.config.ts` — Drizzle Kit config (requires `DATABASE_URL`, automatically provided by Replit)
-- Exports: `.` (pool, db, schema), `./schema` (schema only)
-
-Production migrations are handled by Replit when publishing. In development, we just use `pnpm --filter @workspace/db run push`, and we fallback to `pnpm --filter @workspace/db run push-force`.
-
-### `lib/api-spec` (`@workspace/api-spec`)
-
-Owns the OpenAPI 3.1 spec (`openapi.yaml`) and the Orval config (`orval.config.ts`). Running codegen produces output into two sibling packages:
-
-1. `lib/api-client-react/src/generated/` — React Query hooks + fetch client
-2. `lib/api-zod/src/generated/` — Zod schemas
-
-Run codegen: `pnpm --filter @workspace/api-spec run codegen`
-
-### `lib/api-zod` (`@workspace/api-zod`)
-
-Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used by `api-server` for response validation.
-
-### `lib/api-client-react` (`@workspace/api-client-react`)
-
-Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
-
-### `scripts` (`@workspace/scripts`)
-
-Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
-
-## CineLoop App Features
-
-### Payments (`/api/payments`)
-- Three providers: Stripe, Paystack, Flutterwave (all gracefully disable if env vars missing)
-- `GET /providers` returns availability + USD prices
-- `POST /checkout` creates real provider checkout session, returns redirect URL
-- `GET /verify` confirms payment after redirect — for subscriptions, also calls `processSuccessfulPayment` to grant Pro
-- Verified webhooks at `/webhook/{provider}` — fail-closed in production:
-  - **Stripe**: HMAC-SHA256 using `STRIPE_WEBHOOK_SECRET`. Sig header without secret → 400. In `NODE_ENV=production` the secret is required.
-  - **Paystack**: SHA512 HMAC using `PAYSTACK_SECRET_KEY` against `x-paystack-signature`. Same fail-closed rules.
-  - **Flutterwave**: `verif-hash` header compared to `FLUTTERWAVE_WEBHOOK_HASH`. Same fail-closed rules.
-- Idempotency: `webhookEventsTable` (provider + eventId UNIQUE). Only PG `23505` (unique violation) is treated as duplicate; other DB errors propagate so the provider retries.
-- All webhooks return HTTP 500 on processing failure (NOT 200) so providers retry.
-- Pro grant flow: `processSuccessfulPayment` looks up the email used at checkout, finds-or-creates the user, sets `proUntil` (now + 30/365 days), `proPlan`, clears `proCancelAtPeriodEnd`.
-- Currency conversion: USD→NGN at 1600:1 for Paystack
-- Frontend: `PricingPage`, `TipJarButton`, `PayReturnPage` (auto-claims identity if signed-out user just paid)
-
-### Identity (`/api/identity`)
-- Lightweight email-only sign-in (no password). HMAC-signed cookie `cl_uid` keyed off `SESSION_SECRET`. In `NODE_ENV=production` the server refuses to start if `SESSION_SECRET` is missing or shorter than 16 chars (so cookies cannot be forged with a known default).
-- Note: the claim flow does NOT verify ownership of the email — it is intentionally lightweight ("anyone with this email = this profile"), suitable for personalisation but not for account-level secrets. Adding OTP/magic-link is a future hardening step.
-- `POST /claim {email}` — find-or-create user by email, set cookie, return identity.
-- `GET /me` — read cookie → return current user (id, email, displayName, avatarUrl, isPro, proUntil, proPlan, proCancelAtPeriodEnd).
-- `POST /signout` — clears cookie.
-- Frontend: `IdentityProvider` context (`useIdentity` hook), `ClaimDialog`, `/account` page with subscription management.
-
-### Subscription (`/api/subscription`)
-- `GET /` — returns `{isPro, proUntil, proPlan, cancelAtPeriodEnd, daysRemaining}` for current user.
-- `POST /cancel` — sets `pro_cancel_at_period_end=true` (Pro stays active until `proUntil`).
-- `POST /resume` — clears the cancel flag.
-
-### Watch History (`/api/watch-history`)
-- `POST /` — upsert media progress for current user (uses GREATEST() so progress only ratchets up).
-- `GET /continue` — returns up to 12 recently-watched, partially-completed items (5%–95% progress) sorted by `lastWatchedAt`.
-- `GET /history` — full history.
-- Frontend: `useWatchAnalytics` hook (called in `FeedCard` — fires at 2s/8s/20s of card visibility for 10/35/70% progress milestones); `ContinueWatchingStrip` on `/discover`.
-
-### Search (`/api/tmdb/search`)
-- Frontend: `/search` page with debounced TMDB search, All/Movies/TV chips, poster grid. SearchBar in header navigates here on Enter or "See all results".
-
-### Error handling
-- `ErrorBoundary` at App root with cinematic fallback ("Something snapped").
-- Polished `/404` page with genre-styled CTAs back to feed/archive.
-
-### Schema additions
-- `users`: `email`, `display_name`, `pro_until`, `pro_plan`, `pro_cancel_at_period_end`, `last_claimed_at`
-- `watch_history`: `(user_id, media_type, media_id)` unique index
-- `webhook_events`: `(provider, event_id)` unique index for idempotency
-
-### AI Mood Match (`/api/mood`)
-- `POST /recommend` — takes a free-form prompt, returns 8 curated picks enriched with TMDB data
-- Uses OpenAI gpt-5.4 via `@workspace/integrations-openai-ai-server` (no key needed; Replit AI Integrations proxy)
-- Each pick includes: title, year, mediaType, AI reasoning, vibe tagline, TMDB poster/backdrop/rating/overview
-- Frontend route `/mood` — gradient hero, prompt textarea, suggestion chips, animated card grid
-
-### AI Director Mode (`/api/recommendations`)
-Reads each user's `watch_history` and turns it into a personalized cinematic experience.
-
-- `GET /taste-profile` (auth) — returns `{ profile, needsHistory }`. Profile includes `topGenres`, `topDecades`, `themes`, `vibe` (one-line narrative), `summary`, `historyCount`.
-- `POST /refresh` (auth) — force-rebuild profile + invalidate cached for-you / mood.
-- `GET /for-you` (auth) — 12 personalized picks. TMDB discover by inferred genres → AI re-rank + 1-line "Director's take" per pick. 1h cache.
-- `GET /daily-mood` (auth) — today's theme `{ title, tagline, picks: 6 }`. AI proposes title+picks; if AI fails or TMDB lookups all miss, falls back to TMDB discover seeded by taste genres + day-of-year so the banner always renders. 12h cache.
-- `GET /because-you-watched/:type/:id` (public) — TMDB similar+recommendations → AI top 8 + takes. 7d cache; anon users share `userId=0` cache bucket.
-
-Schema (in `lib/db`):
-- `taste_profiles` (PK `user_id`): `top_genres`, `top_decades`, `themes` (jsonb arrays), `vibe`, `summary`, `history_count` (true total, not sample size), `last_refreshed_at`.
-- `recommendations_cache` (`user_id`, `cache_key` unique): `payload` jsonb, `generated_at`, `expires_at`. Used for for-you, daily-mood, byw cache entries.
-
-Drift detection: `getOrBuildTasteProfile` rebuilds when `|true_count − persisted_count| ≥ 3` or older than 7 days. `buildTasteProfile` runs a separate `count(*)` (samples 50 rows for the prompt but persists the true total).
-
-Implementation: `artifacts/api-server/src/lib/recommendations.ts` (all AI via `gpt-5.4`).
-
-Frontend:
-- `useDirectorMode.ts` — react-query hooks (`useTasteProfile`, `useForYou`, `useDailyMood`, `useBecauseYouWatched`, `useRefreshDirectorMode`) with stale times matching server cache TTLs.
-- `components/discover/DailyMoodBanner.tsx` — cinematic banner with backdrop collage + 6 pick posters.
-- `components/discover/ForYouRail.tsx` — horizontal scroller; takes appear on hover.
-- `pages/TastePage.tsx` at `/taste` — "Director's read" hero, vibe quote, summary, genre/theme/decade pill clouds, refresh button.
-- DiscoverPage renders `DailyMoodBanner → ForYouRail → ContinueWatchingStrip → Archive`. Both new components return `null` for anon users.
-- Linked from AccountPage as "Your cinematic taste".
-
-### Feed reactions, comments, and details (`/api/media`)
-Per-media interactions keyed by `(mediaType, mediaId)` so they work for any TMDB title without needing a `posts` table.
-
-- `GET /media/:type/:id/details` — proxies TMDB; returns `{ title, year, runtime, overview, genres, voteAverage, voteCount, tagline, seasons, episodes }`. Used for the FeedCard metadata strip.
-- `GET /media/:type/:id/reactions` — public; returns `{ liked, saved, likeCount, bookmarkCount, commentCount }`. The single round-trip per card includes commentCount so we don't N+1 fetch the full comment list per visible card.
-- `POST|DELETE /media/:type/:id/like` (auth) and `POST|DELETE /media/:type/:id/bookmark` (auth) — toggle persistent reactions.
-- `GET /media/:type/:id/comments` — public, last 100 newest-first, joined with `users` for display name + avatar.
-- `POST /media/:type/:id/comments` (auth) — body validated by zod (`text` 1–500 chars).
-- `DELETE /media/comments/:commentId` (auth, owner only).
-
-Schema (in `lib/db`):
-- `media_reactions` (`user_id`, `media_type`, `media_id`, `kind` unique; kind = `like` | `bookmark`).
-- `media_comments` (`user_id`, `media_type`, `media_id`, `text`, `created_at`).
-
-Frontend:
-- `useMediaReactions(type, id)` — react-query + optimistic mutate. Uses a per-instance sequence token so out-of-order responses (rapid like→unlike) cannot overwrite the latest intent; `onSettled` invalidates to converge with server truth.
-- `useMediaComments(type, id, { enabled })` — list + add/remove with optimistic mutations; bumps the cached `commentCount` on the reactions query so the FeedCard badge updates instantly.
-- `useMediaDetails(type, id)` — 24h staleTime since TMDB metadata is essentially static.
-- `FeedCard.tsx` — poster/backdrop is the always-rendered floor with the YouTube iframe (now `youtube-nocookie.com`) fading in on top once loaded; metadata strip (year • runtime • ★ rating • genres) and expandable overview live under the title; 4-button rail (heart, message-circle, bookmark, share); 401 from the like/bookmark mutations is a soft no-op for anon users. Test ids: `feed-card`, `feed-title`, `feed-overview`, `feed-like-btn`, `feed-comment-btn`, `feed-bookmark-btn`.
-- `CommentsSheet.tsx` — drag-to-dismiss bottom sheet, anonymous post shows inline "Sign in to comment.", own-comment delete button, relative timestamps. Stops `onClick`/`onPointerDown`/`onTouchStart` propagation on overlay AND body so taps inside don't trigger the FeedCard's tap-to-pause / double-tap-to-like handler. Test ids: `comments-sheet`, `comment-item`, `comment-input`, `comment-send`.
+-   **Database:** PostgreSQL
+-   **ORM:** Drizzle ORM
+-   **API Framework:** Express 5
+-   **Validation:** Zod
+-   **API Codegen:** Orval (from OpenAPI spec)
+-   **Payment Gateways:** Stripe, Paystack, Flutterwave
+-   **AI Services:** OpenAI (via Replit AI Integrations proxy for `gpt-5.4`)
+-   **Media Data:** TMDB (The Movie Database) API
+-   **Build Tool:** esbuild
+-   **Utility Library:** `tsx`
+-   **Frontend Framework:** React
+-   **State Management:** React Query
+-   **Styling:** Tailwind CSS (implied by typical modern React stack, not explicitly mentioned but assumed for UI)

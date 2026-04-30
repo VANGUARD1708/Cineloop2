@@ -172,4 +172,113 @@ router.get("/videos", async (req, res) => {
   }
 });
 
+/**
+ * Image proxy — CORS-safe re-emission of TMDB poster/backdrop bytes so the
+ * client palette extractor can read pixels via Canvas without taint errors.
+ * Strictly scoped to image.tmdb.org with hard guardrails:
+ *   - host allowlist (pre and post redirect)
+ *   - 8s upstream timeout
+ *   - 6 MiB response body cap
+ *   - image/* content-type only
+ * These prevent SSRF, redirect-laundering, and bandwidth/memory DoS.
+ */
+const IMG_PROXY_ALLOWED_HOST = "image.tmdb.org";
+const IMG_PROXY_MAX_BYTES = 6 * 1024 * 1024;
+const IMG_PROXY_TIMEOUT_MS = 8_000;
+
+router.get("/img", async (req, res) => {
+  const url = String(req.query.url || "");
+  if (!url) {
+    res.status(400).json({ error: "url required" });
+    return;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    res.status(400).json({ error: "invalid url" });
+    return;
+  }
+  if (parsed.host !== IMG_PROXY_ALLOWED_HOST || parsed.protocol !== "https:") {
+    res.status(400).json({ error: "host not allowed" });
+    return;
+  }
+
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), IMG_PROXY_TIMEOUT_MS);
+
+  try {
+    const upstream = await fetch(parsed.toString(), {
+      // Re-validate the final host after any redirects. node-fetch follows by default;
+      // we re-parse upstream.url and bail if it leaves the allowlist.
+      signal: ac.signal as any,
+      redirect: "follow",
+    });
+    if (!upstream.ok || !upstream.body) {
+      res.status(upstream.status || 502).end();
+      return;
+    }
+    let finalHost = parsed.host;
+    try {
+      finalHost = new URL((upstream as any).url || parsed.toString()).host;
+    } catch {
+      // ignore — finalHost stays as the validated original
+    }
+    if (finalHost !== IMG_PROXY_ALLOWED_HOST) {
+      res.status(400).json({ error: "redirect to disallowed host" });
+      return;
+    }
+
+    const ct = upstream.headers.get("content-type") || "image/jpeg";
+    if (!/^image\//i.test(ct)) {
+      res.status(415).json({ error: "non-image content-type" });
+      return;
+    }
+
+    // Pre-flight size check — trust content-length if present.
+    const declaredLen = Number(upstream.headers.get("content-length") || "0");
+    if (declaredLen > IMG_PROXY_MAX_BYTES) {
+      res.status(413).json({ error: "image too large" });
+      return;
+    }
+
+    res.setHeader("content-type", ct);
+    res.setHeader("access-control-allow-origin", "*");
+    res.setHeader("cache-control", "public, max-age=86400, immutable");
+
+    // Stream with a running byte cap — abort if upstream lies about size.
+    let total = 0;
+    let aborted = false;
+    const stream: any = upstream.body;
+    stream.on("data", (chunk: Buffer) => {
+      if (aborted) return;
+      total += chunk.length;
+      if (total > IMG_PROXY_MAX_BYTES) {
+        aborted = true;
+        try {
+          ac.abort();
+        } catch {
+          /* noop */
+        }
+        if (!res.headersSent) res.status(413);
+        res.end();
+        return;
+      }
+      res.write(chunk);
+    });
+    stream.on("end", () => {
+      if (!aborted) res.end();
+    });
+    stream.on("error", () => {
+      if (!aborted && !res.headersSent) res.status(502);
+      res.end();
+    });
+  } catch (e: any) {
+    if (!res.headersSent) res.status(e?.name === "AbortError" ? 504 : 500);
+    res.end();
+  } finally {
+    clearTimeout(timer);
+  }
+});
+
 export default router;

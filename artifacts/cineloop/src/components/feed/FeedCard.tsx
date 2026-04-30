@@ -12,9 +12,13 @@ import {
 } from "lucide-react";
 import WatchNowButton from "./WatchNowButton";
 import CommentsSheet from "./CommentsSheet";
+import AmbientParticles from "./AmbientParticles";
+import PresenceBadge from "./PresenceBadge";
 import { useWatchAnalytics } from "@/hooks/useWatchAnalytics";
 import useMediaReactions from "@/hooks/useMediaReactions";
 import useMediaDetails from "@/hooks/useMediaDetails";
+import usePalette from "@/hooks/usePalette";
+import useBestClip from "@/hooks/useBestClip";
 
 interface Props {
   item: any;
@@ -69,6 +73,32 @@ export default function FeedCard({ item }: Props) {
   // commentCount is bundled into the /reactions response — no extra fetch per card.
   const commentCount = reactions.commentCount;
 
+  // Adaptive cinematic palette extracted client-side from the poster/backdrop.
+  const palette = usePalette(film?.backdrop || film?.poster || null);
+
+  // AI-curated best clip — overrides the default first-trailer pick when the AI
+  // re-ranker has weighed in. Server-cached 7d, only fetched when the card is in view.
+  const bestClip = useBestClip(mediaType, mediaId, { enabled: isVisible });
+
+  // Spatial 3D tilt — pointer position relative to the card, throttled via rAF.
+  const [tilt, setTilt] = useState<{ rx: number; ry: number }>({ rx: 0, ry: 0 });
+  const rafRef = useRef<number | null>(null);
+
+  // Once the AI picks a clip we lock it — prevents a late /api/tmdb/videos
+  // response from clobbering the AI choice (race fix).
+  const aiClipLockedRef = useRef(false);
+
+  // Gate motion effects on prefers-reduced-motion for accessibility.
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReduceMotion(mq.matches);
+    update();
+    mq.addEventListener?.("change", update);
+    return () => mq.removeEventListener?.("change", update);
+  }, []);
+
   useWatchAnalytics({
     isVisible,
     filmId: film?.id,
@@ -122,7 +152,10 @@ export default function FeedCard({ item }: Props) {
           data?.results?.find(
             (v: any) => v.site === "YouTube" && v.type === "Trailer",
           ) || data?.results?.find((v: any) => v.site === "YouTube");
-        if (!cancelled && video?.key) setYoutubeId(video.key);
+        // Skip if (a) the component unmounted, (b) the AI has already locked a pick,
+        // or (c) we already have a youtubeId. This makes the AI choice always win.
+        if (cancelled || aiClipLockedRef.current) return;
+        if (!youtubeId && video?.key) setYoutubeId(video.key);
       } catch {
         // poster fallback handles failure silently
       }
@@ -131,7 +164,21 @@ export default function FeedCard({ item }: Props) {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [film?.id, film?.type]);
+
+  // Once the AI's best-clip arrives, lock it as the source of truth.
+  useEffect(() => {
+    if (bestClip.youtubeId && bestClip.youtubeId !== youtubeId) {
+      aiClipLockedRef.current = true;
+      setYoutubeId(bestClip.youtubeId);
+      setIframeReady(false);
+      setTrailerLoaded(false);
+    } else if (bestClip.youtubeId) {
+      aiClipLockedRef.current = true;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bestClip.youtubeId]);
 
   const iframeSrc = useMemo(() => {
     if (!youtubeId || typeof window === "undefined") return null;
@@ -214,6 +261,26 @@ export default function FeedCard({ item }: Props) {
   const posterFallback = film?.backdrop || film?.poster || null;
   const hasTrailer = Boolean(episode.videoUrl) || Boolean(youtubeId);
 
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (reduceMotion) return;
+    if (e.pointerType === "touch") return; // mobile users get motion via scroll
+    const rect = cardRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      // -4..+4 deg tilt — subtle parallax, never disorienting
+      const ry = (x - 0.5) * 8;
+      const rx = (0.5 - y) * 6;
+      setTilt({ rx, ry });
+    });
+  };
+  const handlePointerLeave = () => {
+    if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    setTilt({ rx: 0, ry: 0 });
+  };
+
   return (
     <div
       ref={cardRef}
@@ -222,8 +289,23 @@ export default function FeedCard({ item }: Props) {
         handleTap();
         handleDoubleTap();
       }}
+      onPointerMove={handlePointerMove}
+      onPointerLeave={handlePointerLeave}
       data-testid="feed-card"
+      style={{
+        perspective: "1400px",
+        ["--cl-accent" as any]: palette.primary,
+        ["--cl-accent-rgb" as any]: palette.primaryRGB,
+      }}
     >
+      {/* Spatial 3D layer — all media + overlays parallax together */}
+      <div
+        className="absolute inset-0 will-change-transform transition-transform duration-300 ease-out"
+        style={{
+          transform: `rotateX(${tilt.rx}deg) rotateY(${tilt.ry}deg) scale(1.04)`,
+          transformStyle: "preserve-3d",
+        }}
+      >
       {/* Layer 1: poster fallback always rendered as the floor — guarantees we never
           show a black void while the trailer is fetching/blocked. */}
       {posterFallback && (
@@ -278,10 +360,53 @@ export default function FeedCard({ item }: Props) {
       )}
 
       <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-black/60 z-10 pointer-events-none" />
+      </div>
+      {/* /Spatial 3D layer */}
+
+      {/* Adaptive cinematic vignette — palette-tinted, sits above media but below UI */}
+      <div
+        className="pointer-events-none absolute inset-0 z-[6]"
+        aria-hidden
+        style={{
+          background: `radial-gradient(120% 80% at 50% 100%, rgba(${palette.primaryRGB}, 0.38), transparent 60%)`,
+          mixBlendMode: "screen",
+        }}
+      />
+
+      {/* Ambient drifting particles — palette-tinted dust, only when card is visible
+          and the user hasn't asked for reduced motion. */}
+      <AmbientParticles active={isVisible && !reduceMotion} rgb={palette.primaryRGB} />
+
+      {/* Live presence + watch-party share — only fetched when the card is in view. */}
+      {mediaId && (
+        <PresenceBadge
+          mediaType={mediaType}
+          mediaId={mediaId}
+          rgb={palette.primaryRGB}
+          title={film?.title || "this title"}
+          enabled={isVisible}
+        />
+      )}
+
+      {/* AI-curated hook badge — appears when the AI re-ranker picked the trailer */}
+      {bestClip.aiCurated && bestClip.youtubeId === youtubeId && bestClip.reason && (
+        <div
+          className="pointer-events-none absolute bottom-[152px] left-4 z-30 max-w-[260px] rounded-full border border-white/10 bg-black/65 px-2.5 py-1 text-[11px] text-white/85 backdrop-blur-md"
+          style={{ boxShadow: `0 0 18px rgba(${palette.primaryRGB}, 0.3)` }}
+          data-testid="ai-hook-badge"
+          title={bestClip.reason}
+        >
+          <span className="mr-1 text-amber-300">✨ AI hook</span>
+          <span className="line-clamp-1 align-middle text-white/70">{bestClip.reason}</span>
+        </div>
+      )}
 
       {burst && (
         <div className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none">
-          <Heart className="w-24 h-24 text-[#DC143C] fill-[#DC143C] animate-ping" />
+          <Heart
+            className="w-24 h-24 animate-ping"
+            style={{ color: palette.primary, fill: palette.primary }}
+          />
         </div>
       )}
 

@@ -15,6 +15,7 @@ import watchHistoryRouter from "./watch-history";
 import subscriptionRouter from "./subscription";
 import recommendationsRouter from "./recommendations";
 import { mediaRouter } from "./media";
+import { directorRouter } from "./director";
 
 const router: IRouter = Router();
 
@@ -52,5 +53,8 @@ router.use(recommendationsRouter);
 
 /* Per-media reactions, comments, and lightweight details for the feed */
 router.use(mediaRouter);
+
+/* AI Director Co-pilot — chat, best-clip selection, presence */
+router.use(directorRouter);
 
 export default router;

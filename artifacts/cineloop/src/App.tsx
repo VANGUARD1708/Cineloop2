@@ -9,6 +9,7 @@ import { Shell } from "@/components/layout/Shell";
 import AppHeader from "@/components/layout/AppHeader";
 import { IdentityProvider } from "@/hooks/useIdentity";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import DirectorCopilot from "@/components/director/DirectorCopilot";
 
 import FeedPage from "@/pages/FeedPage";
 import TrendingPage from "@/pages/TrendingPage";
@@ -71,6 +72,7 @@ function App() {
             <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
               <AppHeader />
               <Router />
+              <DirectorCopilot />
             </WouterRouter>
             <Toaster />
           </TooltipProvider>

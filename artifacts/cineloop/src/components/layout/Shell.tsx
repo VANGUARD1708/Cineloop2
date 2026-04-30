@@ -1,9 +1,27 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Home, Flame, Compass, Users, User, Trophy, PlusSquare, Crown, Sparkles, LogIn, Settings, Shield } from "lucide-react";
+import {
+  Home,
+  Flame,
+  Compass,
+  Users,
+  User,
+  Trophy,
+  PlusSquare,
+  Crown,
+  Sparkles,
+  LogIn,
+  Settings,
+  Shield,
+  Search,
+  Bell,
+  Heart,
+  Menu as MenuIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIdentity } from "@/hooks/useIdentity";
 import ClaimDialog from "@/components/identity/ClaimDialog";
+import MobileMenuSheet from "@/components/layout/MobileMenuSheet";
 
 const NAV_ITEMS = [
   { href: "/", label: "Feed", icon: Home },
@@ -11,14 +29,25 @@ const NAV_ITEMS = [
   { href: "/discover", label: "Discover", icon: Compass },
   { href: "/mood", label: "Mood Match", icon: Sparkles, accent: true },
   { href: "/characters", label: "Characters", icon: Users },
+  { href: "/search", label: "Search", icon: Search },
   { href: "/profile", label: "Profile", icon: User },
+  { href: "/notifications", label: "Notifications", icon: Bell },
   { href: "/leaderboard", label: "Rankings", icon: Trophy },
+];
+
+// Curated 4 essentials for the mobile bottom bar (5th slot is the Menu sheet).
+const MOBILE_NAV = [
+  { href: "/", label: "Feed", icon: Home },
+  { href: "/discover", label: "Discover", icon: Compass },
+  { href: "/mood", label: "Mood", icon: Sparkles, accent: true },
+  { href: "/search", label: "Search", icon: Search },
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { user, loading } = useIdentity();
   const [showClaim, setShowClaim] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   return (
     <div className="flex min-h-[100dvh] w-full bg-background text-foreground flex-col md:flex-row overflow-hidden">
@@ -31,7 +60,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <span className="font-serif font-bold text-xl tracking-wide uppercase text-white">CineLoop</span>
         </div>
 
-        <nav className="flex flex-col gap-2 flex-1">
+        <nav className="flex flex-col gap-1 flex-1 overflow-y-auto pr-1">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = location === item.href;
@@ -39,13 +68,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
               <Link key={item.href} href={item.href} className="w-full">
                 <div
                   className={cn(
-                    "flex items-center gap-3 px-3 py-3 rounded-md transition-all cursor-pointer font-medium",
+                    "flex items-center gap-3 px-3 py-2.5 rounded-md transition-all cursor-pointer font-medium",
                     isActive
                       ? "bg-primary text-primary-foreground shadow-[0_0_15px_rgba(220,20,60,0.3)]"
                       : item.accent
                       ? "text-rose-200 hover:text-white hover:bg-white/5 bg-gradient-to-r from-rose-500/5 to-violet-500/5 border border-white/[0.04]"
                       : "text-muted-foreground hover:text-white hover:bg-white/5"
                   )}
+                  data-testid={`link-sidebar-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
                 >
                   <Icon
                     size={20}
@@ -59,6 +89,23 @@ export function Shell({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
+
+          {/* Taste DNA — only for signed-in users */}
+          {!loading && user && (
+            <Link href="/taste" className="w-full" data-testid="link-sidebar-taste">
+              <div
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-md transition-all cursor-pointer font-medium",
+                  location === "/taste"
+                    ? "bg-primary text-primary-foreground shadow-[0_0_15px_rgba(220,20,60,0.3)]"
+                    : "text-muted-foreground hover:text-white hover:bg-white/5",
+                )}
+              >
+                <Heart size={20} className={cn(location === "/taste" && "text-white")} />
+                Taste DNA
+              </div>
+            </Link>
+          )}
         </nav>
 
         {/* Identity area */}
@@ -140,23 +187,84 @@ export function Shell({ children }: { children: React.ReactNode }) {
         {children}
       </main>
 
-      {/* Mobile Bottom Nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-card border-t border-border flex items-center justify-around px-2 z-50">
-        {NAV_ITEMS.slice(0, 5).map((item) => {
+      {/* Mobile Bottom Nav: 4 essentials + Menu */}
+      <nav
+        className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-card border-t border-border flex items-stretch justify-around px-1 z-50"
+        data-testid="nav-mobile-bottom"
+      >
+        {MOBILE_NAV.map((item) => {
           const Icon = item.icon;
           const isActive = location === item.href;
           return (
-            <Link key={item.href} href={item.href}>
-              <div className="flex flex-col items-center justify-center p-2 cursor-pointer w-14">
-                <Icon size={20} className={cn(isActive ? "text-primary" : "text-muted-foreground")} />
-                <span className={cn("text-[10px] mt-1", isActive ? "text-primary" : "text-muted-foreground")}>{item.label}</span>
+            <Link
+              key={item.href}
+              href={item.href}
+              className="flex-1"
+              data-testid={`link-mobile-${item.label.toLowerCase()}`}
+            >
+              <div className="flex flex-col items-center justify-center h-full px-1 cursor-pointer">
+                <Icon
+                  size={20}
+                  className={cn(
+                    isActive
+                      ? "text-primary"
+                      : item.accent
+                      ? "text-rose-300"
+                      : "text-muted-foreground",
+                  )}
+                />
+                <span
+                  className={cn(
+                    "text-[10px] mt-0.5 font-medium",
+                    isActive ? "text-primary" : "text-muted-foreground",
+                  )}
+                >
+                  {item.label}
+                </span>
               </div>
             </Link>
           );
         })}
+
+        {/* Menu / Profile sheet trigger */}
+        <button
+          type="button"
+          onClick={() => setShowMobileMenu(true)}
+          className="flex-1 flex flex-col items-center justify-center px-1 cursor-pointer relative"
+          data-testid="button-mobile-menu-open"
+          aria-label="Open menu"
+        >
+          {!loading && user ? (
+            <div className="relative">
+              <img
+                src={user.avatarUrl}
+                alt=""
+                className={cn(
+                  "h-6 w-6 rounded-full border",
+                  user.isPro ? "border-amber-400/70" : "border-white/20",
+                )}
+              />
+              {user.isAdmin && (
+                <span className="absolute -top-1 -right-1 flex h-3 w-3 items-center justify-center rounded-full bg-rose-500 ring-2 ring-card">
+                  <Shield className="h-2 w-2 text-white" strokeWidth={3} />
+                </span>
+              )}
+            </div>
+          ) : (
+            <MenuIcon size={20} className="text-muted-foreground" />
+          )}
+          <span className="text-[10px] mt-0.5 font-medium text-muted-foreground">
+            {!loading && user ? "Menu" : "More"}
+          </span>
+        </button>
       </nav>
 
       <ClaimDialog open={showClaim} onClose={() => setShowClaim(false)} />
+      <MobileMenuSheet
+        open={showMobileMenu}
+        onClose={() => setShowMobileMenu(false)}
+        onSignIn={() => setShowClaim(true)}
+      />
     </div>
   );
 }

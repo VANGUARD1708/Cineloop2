@@ -26,8 +26,8 @@ export default function AppHeader() {
       <div className="flex items-center gap-4 px-4 py-3 bg-black/70 backdrop-blur-md border-b border-white/10">
 
         <Link href="/">
-          <span className="text-white font-semibold text-lg tracking-tight cursor-pointer">
-            CineFeed
+          <span className="font-serif font-bold text-lg tracking-wide uppercase text-white cursor-pointer" data-testid="link-header-logo">
+            CineLoop
           </span>
         </Link>
 

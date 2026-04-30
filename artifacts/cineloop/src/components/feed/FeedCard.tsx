@@ -4,8 +4,6 @@ import {
   Bookmark,
   Share2,
   Play,
-  Volume2,
-  VolumeX,
   Sparkles,
   MessageCircle,
   Star,
@@ -14,11 +12,13 @@ import WatchNowButton from "./WatchNowButton";
 import CommentsSheet from "./CommentsSheet";
 import AmbientParticles from "./AmbientParticles";
 import PresenceBadge from "./PresenceBadge";
+import VolumeControl from "./VolumeControl";
 import { useWatchAnalytics } from "@/hooks/useWatchAnalytics";
 import useMediaReactions from "@/hooks/useMediaReactions";
 import useMediaDetails from "@/hooks/useMediaDetails";
 import usePalette from "@/hooks/usePalette";
 import useBestClip from "@/hooks/useBestClip";
+import useVolumePref from "@/hooks/useVolumePref";
 
 interface Props {
   item: any;
@@ -54,7 +54,7 @@ export default function FeedCard({ item }: Props) {
 
   const [isVisible, setIsVisible] = useState(false);
   const [paused, setPaused] = useState(false);
-  const [muted, setMuted] = useState(true);
+  const { muted, volume, setVolume, toggleMuted } = useVolumePref();
   const [burst, setBurst] = useState(false);
   const [iframeReady, setIframeReady] = useState(false);
   const [trailerLoaded, setTrailerLoaded] = useState(false);
@@ -117,10 +117,10 @@ export default function FeedCard({ item }: Props) {
     return () => observer.disconnect();
   }, []);
 
-  const sendCommand = (func: string) => {
+  const sendCommand = (func: string, args: unknown[] = []) => {
     if (!iframeReady) return;
     iframeRef.current?.contentWindow?.postMessage(
-      JSON.stringify({ event: "command", func, args: [] }),
+      JSON.stringify({ event: "command", func, args }),
       "*",
     );
   };
@@ -134,10 +134,33 @@ export default function FeedCard({ item }: Props) {
       setPaused(false);
       videoRef.current?.play().catch(() => {});
       sendCommand("playVideo");
-      sendCommand("mute");
+      // Restore the user's persisted preference instead of always force-muting.
+      if (muted) {
+        sendCommand("mute");
+      } else {
+        sendCommand("unMute");
+        sendCommand("setVolume", [Math.round(volume * 100)]);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isVisible, youtubeId, iframeReady]);
+
+  // Push muted/volume changes to the active media (HTML video or YouTube iframe).
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = muted;
+      videoRef.current.volume = volume;
+    }
+    if (iframeReady) {
+      if (muted) {
+        sendCommand("mute");
+      } else {
+        sendCommand("unMute");
+        sendCommand("setVolume", [Math.round(volume * 100)]);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [muted, volume, iframeReady]);
 
   useEffect(() => {
     let cancelled = false;
@@ -202,17 +225,8 @@ export default function FeedCard({ item }: Props) {
     setPaused(!paused);
   };
 
-  const handleSoundToggle = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (episode.videoUrl) {
-      const newMuted = !muted;
-      if (videoRef.current) videoRef.current.muted = newMuted;
-      setMuted(newMuted);
-      return;
-    }
-    muted ? sendCommand("unMute") : sendCommand("mute");
-    setMuted(!muted);
-  };
+  // Mute/volume changes flow through the persisted hook + the sync effect above,
+  // so VolumeControl just calls toggleMuted() and setVolume() directly.
 
   const handleDoubleTap = () => {
     const now = Date.now();
@@ -418,17 +432,13 @@ export default function FeedCard({ item }: Props) {
         </div>
       )}
 
-      <button
-        onClick={handleSoundToggle}
-        className="absolute top-6 right-4 z-50 bg-black/60 backdrop-blur-sm p-2 rounded-full"
-        aria-label={muted ? "Unmute" : "Mute"}
-      >
-        {muted ? (
-          <VolumeX className="w-5 h-5 text-white" />
-        ) : (
-          <Volume2 className="w-5 h-5 text-white" />
-        )}
-      </button>
+      <VolumeControl
+        muted={muted}
+        volume={volume}
+        playing={!paused && isVisible}
+        onToggleMute={toggleMuted}
+        onVolumeChange={setVolume}
+      />
 
       {/* Action rail */}
       <div className="absolute right-3 bottom-32 flex flex-col items-center gap-5 z-20">

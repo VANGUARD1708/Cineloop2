@@ -23,6 +23,7 @@ import PayReturnPage from "@/pages/PayReturnPage";
 import MoodMatchPage from "@/pages/MoodMatchPage";
 import AccountPage from "@/pages/AccountPage";
 import SearchPage from "@/pages/SearchPage";
+import TastePage from "@/pages/TastePage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -44,6 +45,7 @@ function Router() {
         <Route path="/characters" component={CharactersPage} />
         <Route path="/profile" component={ProfilePage} />
         <Route path="/account" component={AccountPage} />
+        <Route path="/taste" component={TastePage} />
         <Route path="/search" component={SearchPage} />
         <Route path="/leaderboard" component={LeaderboardPage} />
         <Route path="/upload" component={UploadPage} />

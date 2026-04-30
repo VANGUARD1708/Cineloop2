@@ -187,6 +187,17 @@ export default function AccountPage() {
             <ChevronRight size={16} className="text-zinc-500" />
           </Link>
           <Link
+            href="/taste"
+            data-testid="link-taste"
+            className="flex items-center justify-between p-4 hover:bg-white/5 transition-colors border-b border-white/5"
+          >
+            <span className="text-sm flex items-center gap-2">
+              <span className="text-amber-300">✦</span>
+              Your cinematic taste
+            </span>
+            <ChevronRight size={16} className="text-zinc-500" />
+          </Link>
+          <Link
             href="/pricing"
             className="flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
           >

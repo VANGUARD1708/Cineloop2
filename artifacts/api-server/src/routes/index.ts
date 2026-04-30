@@ -13,6 +13,7 @@ import moodRouter from "./mood";
 import identityRouter from "./identity";
 import watchHistoryRouter from "./watch-history";
 import subscriptionRouter from "./subscription";
+import recommendationsRouter from "./recommendations";
 
 const router: IRouter = Router();
 
@@ -44,5 +45,8 @@ router.use(subscriptionRouter);
 
 /* AI mood match */
 router.use("/mood", moodRouter);
+
+/* AI Director Mode — taste profile, For You, daily mood, because-you-watched */
+router.use(recommendationsRouter);
 
 export default router;

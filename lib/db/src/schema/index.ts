@@ -6,3 +6,4 @@ export * from "./characters";
 export * from "./payments";
 export * from "./watch_history";
 export * from "./webhook_events";
+export * from "./taste_profiles";

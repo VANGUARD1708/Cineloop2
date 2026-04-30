@@ -148,3 +148,28 @@ Utility scripts package. Each script is a `.ts` file in `src/` with a correspond
 - Uses OpenAI gpt-5.4 via `@workspace/integrations-openai-ai-server` (no key needed; Replit AI Integrations proxy)
 - Each pick includes: title, year, mediaType, AI reasoning, vibe tagline, TMDB poster/backdrop/rating/overview
 - Frontend route `/mood` — gradient hero, prompt textarea, suggestion chips, animated card grid
+
+### AI Director Mode (`/api/recommendations`)
+Reads each user's `watch_history` and turns it into a personalized cinematic experience.
+
+- `GET /taste-profile` (auth) — returns `{ profile, needsHistory }`. Profile includes `topGenres`, `topDecades`, `themes`, `vibe` (one-line narrative), `summary`, `historyCount`.
+- `POST /refresh` (auth) — force-rebuild profile + invalidate cached for-you / mood.
+- `GET /for-you` (auth) — 12 personalized picks. TMDB discover by inferred genres → AI re-rank + 1-line "Director's take" per pick. 1h cache.
+- `GET /daily-mood` (auth) — today's theme `{ title, tagline, picks: 6 }`. AI proposes title+picks; if AI fails or TMDB lookups all miss, falls back to TMDB discover seeded by taste genres + day-of-year so the banner always renders. 12h cache.
+- `GET /because-you-watched/:type/:id` (public) — TMDB similar+recommendations → AI top 8 + takes. 7d cache; anon users share `userId=0` cache bucket.
+
+Schema (in `lib/db`):
+- `taste_profiles` (PK `user_id`): `top_genres`, `top_decades`, `themes` (jsonb arrays), `vibe`, `summary`, `history_count` (true total, not sample size), `last_refreshed_at`.
+- `recommendations_cache` (`user_id`, `cache_key` unique): `payload` jsonb, `generated_at`, `expires_at`. Used for for-you, daily-mood, byw cache entries.
+
+Drift detection: `getOrBuildTasteProfile` rebuilds when `|true_count − persisted_count| ≥ 3` or older than 7 days. `buildTasteProfile` runs a separate `count(*)` (samples 50 rows for the prompt but persists the true total).
+
+Implementation: `artifacts/api-server/src/lib/recommendations.ts` (all AI via `gpt-5.4`).
+
+Frontend:
+- `useDirectorMode.ts` — react-query hooks (`useTasteProfile`, `useForYou`, `useDailyMood`, `useBecauseYouWatched`, `useRefreshDirectorMode`) with stale times matching server cache TTLs.
+- `components/discover/DailyMoodBanner.tsx` — cinematic banner with backdrop collage + 6 pick posters.
+- `components/discover/ForYouRail.tsx` — horizontal scroller; takes appear on hover.
+- `pages/TastePage.tsx` at `/taste` — "Director's read" hero, vibe quote, summary, genre/theme/decade pill clouds, refresh button.
+- DiscoverPage renders `DailyMoodBanner → ForYouRail → ContinueWatchingStrip → Archive`. Both new components return `null` for anon users.
+- Linked from AccountPage as "Your cinematic taste".

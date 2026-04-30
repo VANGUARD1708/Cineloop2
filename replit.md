@@ -101,10 +101,47 @@ Utility scripts package. Each script is a `.ts` file in `src/` with a correspond
 - Three providers: Stripe, Paystack, Flutterwave (all gracefully disable if env vars missing)
 - `GET /providers` returns availability + USD prices
 - `POST /checkout` creates real provider checkout session, returns redirect URL
-- `GET /verify` confirms payment after redirect
-- Webhook stubs at `/webhooks/{provider}`
-- Currency conversion: USD→NGN at 1600:1 for Paystack (test accounts often only support NGN)
-- Frontend: `PricingPage`, `TipJarButton`, `PayReturnPage`
+- `GET /verify` confirms payment after redirect — for subscriptions, also calls `processSuccessfulPayment` to grant Pro
+- Verified webhooks at `/webhook/{provider}` — fail-closed in production:
+  - **Stripe**: HMAC-SHA256 using `STRIPE_WEBHOOK_SECRET`. Sig header without secret → 400. In `NODE_ENV=production` the secret is required.
+  - **Paystack**: SHA512 HMAC using `PAYSTACK_SECRET_KEY` against `x-paystack-signature`. Same fail-closed rules.
+  - **Flutterwave**: `verif-hash` header compared to `FLUTTERWAVE_WEBHOOK_HASH`. Same fail-closed rules.
+- Idempotency: `webhookEventsTable` (provider + eventId UNIQUE). Only PG `23505` (unique violation) is treated as duplicate; other DB errors propagate so the provider retries.
+- All webhooks return HTTP 500 on processing failure (NOT 200) so providers retry.
+- Pro grant flow: `processSuccessfulPayment` looks up the email used at checkout, finds-or-creates the user, sets `proUntil` (now + 30/365 days), `proPlan`, clears `proCancelAtPeriodEnd`.
+- Currency conversion: USD→NGN at 1600:1 for Paystack
+- Frontend: `PricingPage`, `TipJarButton`, `PayReturnPage` (auto-claims identity if signed-out user just paid)
+
+### Identity (`/api/identity`)
+- Lightweight email-only sign-in (no password). HMAC-signed cookie `cl_uid` keyed off `SESSION_SECRET`. In `NODE_ENV=production` the server refuses to start if `SESSION_SECRET` is missing or shorter than 16 chars (so cookies cannot be forged with a known default).
+- Note: the claim flow does NOT verify ownership of the email — it is intentionally lightweight ("anyone with this email = this profile"), suitable for personalisation but not for account-level secrets. Adding OTP/magic-link is a future hardening step.
+- `POST /claim {email}` — find-or-create user by email, set cookie, return identity.
+- `GET /me` — read cookie → return current user (id, email, displayName, avatarUrl, isPro, proUntil, proPlan, proCancelAtPeriodEnd).
+- `POST /signout` — clears cookie.
+- Frontend: `IdentityProvider` context (`useIdentity` hook), `ClaimDialog`, `/account` page with subscription management.
+
+### Subscription (`/api/subscription`)
+- `GET /` — returns `{isPro, proUntil, proPlan, cancelAtPeriodEnd, daysRemaining}` for current user.
+- `POST /cancel` — sets `pro_cancel_at_period_end=true` (Pro stays active until `proUntil`).
+- `POST /resume` — clears the cancel flag.
+
+### Watch History (`/api/watch-history`)
+- `POST /` — upsert media progress for current user (uses GREATEST() so progress only ratchets up).
+- `GET /continue` — returns up to 12 recently-watched, partially-completed items (5%–95% progress) sorted by `lastWatchedAt`.
+- `GET /history` — full history.
+- Frontend: `useWatchAnalytics` hook (called in `FeedCard` — fires at 2s/8s/20s of card visibility for 10/35/70% progress milestones); `ContinueWatchingStrip` on `/discover`.
+
+### Search (`/api/tmdb/search`)
+- Frontend: `/search` page with debounced TMDB search, All/Movies/TV chips, poster grid. SearchBar in header navigates here on Enter or "See all results".
+
+### Error handling
+- `ErrorBoundary` at App root with cinematic fallback ("Something snapped").
+- Polished `/404` page with genre-styled CTAs back to feed/archive.
+
+### Schema additions
+- `users`: `email`, `display_name`, `pro_until`, `pro_plan`, `pro_cancel_at_period_end`, `last_claimed_at`
+- `watch_history`: `(user_id, media_type, media_id)` unique index
+- `webhook_events`: `(provider, event_id)` unique index for idempotency
 
 ### AI Mood Match (`/api/mood`)
 - `POST /recommend` — takes a free-form prompt, returns 8 curated picks enriched with TMDB data

@@ -6,17 +6,19 @@ import {
   xpEventsTable
 } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
+import { isProActive } from "../lib/identity";
 
 const router: IRouter = Router();
 
 const DEFAULT_USER_ID = 1;
 
 /* ------------------ CURRENT USER ------------------ */
-router.get("/users/me", async (_req, res) => {
+router.get("/users/me", async (req, res) => {
+  const id = req.userId ?? DEFAULT_USER_ID;
   const [user] = await db
     .select()
     .from(usersTable)
-    .where(eq(usersTable.id, DEFAULT_USER_ID));
+    .where(eq(usersTable.id, id));
 
   if (!user) {
     res.status(404).json({ error: "User not found" });
@@ -28,11 +30,11 @@ router.get("/users/me", async (_req, res) => {
     .from(userBadgesTable)
     .where(eq(userBadgesTable.userId, user.id));
 
-  const followedCharacters: number[] = [];
-
   res.json({
     id: user.id,
     username: user.username,
+    email: user.email,
+    displayName: user.displayName ?? user.username,
     avatarUrl: user.avatarUrl,
     level: user.level,
     xp: user.xp,
@@ -42,16 +44,22 @@ router.get("/users/me", async (_req, res) => {
     totalWatched: user.totalWatched,
     totalLikes: user.totalLikes,
     badges: badges.map((b) => b.badge),
-    followedCharacters,
+    followedCharacters: [] as number[],
+    isPro: isProActive(user),
+    proUntil: user.proUntil?.toISOString() ?? null,
+    proPlan: user.proPlan,
+    proCancelAtPeriodEnd: user.proCancelAtPeriodEnd,
+    isClaimedAccount: !!req.userId,
   });
 });
 
 /* ------------------ XP HISTORY ------------------ */
-router.get("/users/me/xp-history", async (_req, res) => {
+router.get("/users/me/xp-history", async (req, res) => {
+  const id = req.userId ?? DEFAULT_USER_ID;
   const events = await db
     .select()
     .from(xpEventsTable)
-    .where(eq(xpEventsTable.userId, DEFAULT_USER_ID))
+    .where(eq(xpEventsTable.userId, id))
     .orderBy(desc(xpEventsTable.createdAt))
     .limit(20);
 
@@ -67,11 +75,12 @@ router.get("/users/me/xp-history", async (_req, res) => {
 });
 
 /* ------------------ STREAK ------------------ */
-router.get("/users/me/streak", async (_req, res) => {
+router.get("/users/me/streak", async (req, res) => {
+  const id = req.userId ?? DEFAULT_USER_ID;
   const [user] = await db
     .select()
     .from(usersTable)
-    .where(eq(usersTable.id, DEFAULT_USER_ID));
+    .where(eq(usersTable.id, id));
 
   if (!user) {
     res.status(404).json({ error: "User not found" });
@@ -106,6 +115,7 @@ router.get("/leaderboard", async (_req, res) => {
       level: u.level,
       xp: u.xp,
       streakDays: u.streakDays,
+      isPro: isProActive(u),
     }))
   );
 });

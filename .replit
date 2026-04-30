@@ -1,4 +1,4 @@
-modules = ["nodejs-24"]
+modules = ["nodejs-24", "postgresql-16"]
 
 [[artifacts]]
 id = "artifacts/api-server"
@@ -44,3 +44,6 @@ externalPort = 3000
 [[ports]]
 localPort = 24072
 externalPort = 80
+
+[nix]
+channel = "stable-25_05"

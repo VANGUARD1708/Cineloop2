@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { useLocation } from "wouter";
-import { User } from "lucide-react";
+import { User, Crown } from "lucide-react";
 
 import NotificationBell from "@/components/notifications/NotificationBell";
 import SearchBar from "@/components/search/SearchBar";
+import { useIdentity } from "@/hooks/useIdentity";
 
 export default function AppHeader() {
   const [location] = useLocation();
   const [hidden, setHidden] = useState(false);
+  const { user } = useIdentity();
 
   // hide header on feed
   useEffect(() => {
@@ -36,9 +38,18 @@ export default function AppHeader() {
         <div className="flex items-center gap-4">
           <NotificationBell />
 
-          <Link href="/profile">
-            <span className="text-white opacity-80 hover:opacity-100 cursor-pointer">
-              <User className="w-5 h-5" />
+          <Link href="/account" data-testid="link-header-account">
+            <span className="text-white opacity-80 hover:opacity-100 cursor-pointer flex items-center gap-1.5">
+              {user?.isPro && <Crown className="w-4 h-4 text-amber-400" />}
+              {user ? (
+                <img
+                  src={user.avatarUrl}
+                  alt=""
+                  className="w-7 h-7 rounded-full border border-white/20"
+                />
+              ) : (
+                <User className="w-5 h-5" />
+              )}
             </span>
           </Link>
         </div>

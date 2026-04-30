@@ -6,10 +6,10 @@ import { useEffect } from "react";
 import NotFound from "@/pages/not-found";
 import { Shell } from "@/components/layout/Shell";
 
-// Header
 import AppHeader from "@/components/layout/AppHeader";
+import { IdentityProvider } from "@/hooks/useIdentity";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
-// Pages
 import FeedPage from "@/pages/FeedPage";
 import TrendingPage from "@/pages/TrendingPage";
 import DiscoverPage from "@/pages/DiscoverPage";
@@ -21,6 +21,8 @@ import NotificationsPage from "@/pages/NotificationsPage";
 import PricingPage from "@/pages/PricingPage";
 import PayReturnPage from "@/pages/PayReturnPage";
 import MoodMatchPage from "@/pages/MoodMatchPage";
+import AccountPage from "@/pages/AccountPage";
+import SearchPage from "@/pages/SearchPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -41,6 +43,8 @@ function Router() {
         <Route path="/mood" component={MoodMatchPage} />
         <Route path="/characters" component={CharactersPage} />
         <Route path="/profile" component={ProfilePage} />
+        <Route path="/account" component={AccountPage} />
+        <Route path="/search" component={SearchPage} />
         <Route path="/leaderboard" component={LeaderboardPage} />
         <Route path="/upload" component={UploadPage} />
         <Route path="/notifications" component={NotificationsPage} />
@@ -58,15 +62,19 @@ function App() {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <AppHeader />
-          <Router />
-        </WouterRouter>
-        <Toaster />
-      </TooltipProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <IdentityProvider>
+          <TooltipProvider>
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <AppHeader />
+              <Router />
+            </WouterRouter>
+            <Toaster />
+          </TooltipProvider>
+        </IdentityProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useGetFilms, getGetFilmsQueryKey } from "@workspace/api-client-react";
 import { Search, Filter } from "lucide-react";
 import { Link } from "wouter";
+import ContinueWatchingStrip from "@/components/feed/ContinueWatchingStrip";
 
 const GENRES = ["All", "Sci-Fi", "Thriller", "Horror", "Drama", "Mystery", "Cyberpunk"];
 
@@ -14,8 +15,9 @@ export default function DiscoverPage() {
   });
 
   return (
-    <div className="w-full min-h-screen bg-background p-4 md:p-8 pt-8 pb-24">
-      <div className="max-w-6xl mx-auto">
+    <div className="w-full min-h-screen bg-background pt-2 md:pt-4 pb-24">
+      <ContinueWatchingStrip />
+      <div className="max-w-6xl mx-auto p-4 md:p-8">
         <header className="mb-8">
           <h1 className="text-4xl md:text-5xl font-serif font-bold text-white mb-6">Archive</h1>
           

@@ -1,91 +1,63 @@
 import { useEffect, useRef } from "react";
 
-export interface WatchAnalytics {
-  watchTime: number;
-  duration: number;
-  replayed: boolean;
-  skipped: boolean;
+interface Args {
+  isVisible: boolean;
+  filmId?: number | string;
+  filmType?: string;
+  title?: string;
+  posterPath?: string | null;
+  backdropPath?: string | null;
 }
 
-export default function useWatchAnalytics(
-  videoRef: React.RefObject<HTMLVideoElement>,
-  id: string,
-  onUpdate?: (id: string, data: WatchAnalytics) => void
-) {
-  const startTime = useRef(0);
-  const watched = useRef(0);
-  const replayed = useRef(false);
+const BASE = import.meta.env.BASE_URL;
+
+/**
+ * Fires watch-progress POSTs as the user lingers on a feed card.
+ * - 2s visible  -> 10% progress
+ * - 8s visible  -> 35% progress
+ * - 20s visible -> 70% progress
+ * Each milestone fires once per mount.
+ */
+export function useWatchAnalytics({ isVisible, filmId, filmType, title, posterPath, backdropPath }: Args) {
+  const fired = useRef<Set<number>>(new Set());
+  const start = useRef<number | null>(null);
+  const timers = useRef<number[]>([]);
 
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
+    if (!isVisible || !filmId) {
+      start.current = null;
+      timers.current.forEach(clearTimeout);
+      timers.current = [];
+      return;
+    }
+    start.current = Date.now();
 
-    const onPlay = () => {
-      startTime.current = Date.now();
+    const send = (pct: number) => {
+      if (fired.current.has(pct)) return;
+      fired.current.add(pct);
+      fetch(`${BASE}api/watch-history`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mediaType: filmType || "movie",
+          mediaId: String(filmId),
+          title: title || "Untitled",
+          posterPath: posterPath ?? null,
+          backdropPath: backdropPath ?? null,
+          progressPct: pct,
+          completed: pct >= 90,
+        }),
+      }).catch(() => {});
     };
 
-    const onPause = () => {
-      watched.current +=
-        (Date.now() -
-          startTime.current) /
-        1000;
-    };
-
-    const onEnded = () => {
-      replayed.current = true;
-    };
-
-    video.addEventListener(
-      "play",
-      onPlay
-    );
-    video.addEventListener(
-      "pause",
-      onPause
-    );
-    video.addEventListener(
-      "ended",
-      onEnded
-    );
+    timers.current.push(window.setTimeout(() => send(10), 2000));
+    timers.current.push(window.setTimeout(() => send(35), 8000));
+    timers.current.push(window.setTimeout(() => send(70), 20000));
 
     return () => {
-      video.removeEventListener(
-        "play",
-        onPlay
-      );
-      video.removeEventListener(
-        "pause",
-        onPause
-      );
-      video.removeEventListener(
-        "ended",
-        onEnded
-      );
+      timers.current.forEach(clearTimeout);
+      timers.current = [];
     };
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      const video =
-        videoRef.current;
-
-      if (!video) return;
-
-      const duration =
-        video.duration || 0;
-
-      const skipped =
-        watched.current <
-        duration * 0.3;
-
-      onUpdate?.(id, {
-        watchTime:
-          watched.current,
-        duration,
-        replayed:
-          replayed.current,
-        skipped,
-      });
-    };
-  }, [id]);
+  }, [isVisible, filmId, filmType, title, posterPath, backdropPath]);
 }

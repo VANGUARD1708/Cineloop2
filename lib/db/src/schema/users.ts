@@ -1,10 +1,12 @@
-import { pgTable, text, serial, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
+  email: text("email").unique(),
+  displayName: text("display_name"),
   avatarUrl: text("avatar_url").notNull(),
   level: integer("level").notNull().default(1),
   xp: integer("xp").notNull().default(0),
@@ -15,6 +17,10 @@ export const usersTable = pgTable("users", {
   totalLikes: integer("total_likes").notNull().default(0),
   lastActiveDate: timestamp("last_active_date"),
   longestStreak: integer("longest_streak").notNull().default(0),
+  proUntil: timestamp("pro_until"),
+  proPlan: text("pro_plan"),
+  proCancelAtPeriodEnd: boolean("pro_cancel_at_period_end").notNull().default(false),
+  lastClaimedAt: timestamp("last_claimed_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

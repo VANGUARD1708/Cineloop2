@@ -4,3 +4,5 @@ export * from "./vote_polls";
 export * from "./users";
 export * from "./characters";
 export * from "./payments";
+export * from "./watch_history";
+export * from "./webhook_events";

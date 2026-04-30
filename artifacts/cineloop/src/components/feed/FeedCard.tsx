@@ -9,9 +9,16 @@ import {
   Sparkles,
 } from "lucide-react";
 import WatchNowButton from "./WatchNowButton";
+import { useWatchAnalytics } from "@/hooks/useWatchAnalytics";
 
 interface Props {
   item: any;
+}
+
+function tmdbPath(url?: string): string | null {
+  if (!url) return null;
+  const m = url.match(/\/t\/p\/[^/]+(\/.+)$/);
+  return m ? m[1] : null;
 }
 
 export default function FeedCard({ item }: Props) {
@@ -34,6 +41,15 @@ export default function FeedCard({ item }: Props) {
   const [youtubeId, setYoutubeId] = useState<string | null>(null);
 
   const lastTap = useRef(0);
+
+  useWatchAnalytics({
+    isVisible,
+    filmId: film?.id,
+    filmType: film?.type,
+    title: film?.title,
+    posterPath: tmdbPath(film?.poster),
+    backdropPath: tmdbPath(film?.backdrop),
+  });
 
   useEffect(() => {
     const observer = new IntersectionObserver(
